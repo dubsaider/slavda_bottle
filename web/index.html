@@ -19,6 +19,7 @@
 
 <nav id="tabs">
   <button data-tab="camera" class="on">Камера</button>
+  <button data-tab="setup">Настройка</button>
   <button data-tab="synth">Синтетика</button>
   <button data-tab="journal">Журнал <span id="jcount" class="pill">0</span></button>
   <button data-tab="metrics">Метрики</button>
@@ -37,6 +38,10 @@
   </div>
 
   <section id="camera" class="tab on">
+    <div id="demoBanner" class="banner hidden">
+      Сейчас включён демо-рецепт для синтетической бутылки — настоящую бутылку он забракует.
+      <button data-goto="setup" class="primary">Настроить под свою бутылку</button>
+    </div>
     <div class="cam">
       <div class="viewport">
         <video id="video" playsinline muted></video>
@@ -53,6 +58,43 @@
           <input type="file" id="upload" accept="image/*" multiple disabled>
         </label>
         <div id="last" class="last empty">Здесь будет последний результат</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="setup" class="tab">
+    <p class="lead">Эталон для своей бутылки: один снимок годной бутылки и две рамки. Бутылку система будет искать по сходству с эталоном, поэтому фон может быть любым, но камера и место бутылки между снимками не должны меняться.</p>
+    <div class="row">
+      <button id="suLast" disabled>Взять последний снимок с камеры</button>
+      <label class="file">или загрузить фото годной бутылки <input type="file" id="suUpload" accept="image/*" disabled></label>
+    </div>
+    <div class="setup">
+      <div class="canvasbox">
+        <canvas id="suCanvas" width="10" height="10"></canvas>
+        <p id="suHint" class="hint">Сначала выберите снимок.</p>
+      </div>
+      <div class="side">
+        <div class="row steps">
+          <button id="suStepBottle" class="on">1. Рамка бутылки</button>
+          <button id="suStepLabel">2. Рамка этикетки</button>
+          <button id="suNoLabel">без этикетки</button>
+        </div>
+        <div class="form">
+          <label>Название <input id="suSku" type="text" value="моя бутылка"></label>
+          <label>Диаметр бутылки, мм <input id="suD" type="number" value="65"></label>
+          <label>Диаметр крышки, мм <input id="suCapD" type="number" value="30"></label>
+          <label>Высота крышки, мм <input id="suCapH" type="number" value="18"></label>
+        </div>
+        <p class="hint">0,5 л ≈ 65 мм, 1 л ≈ 80 мм, 1,5 л ≈ 88 мм. Точность не нужна: это только масштаб для допусков в мм.</p>
+        <div class="row">
+          <span class="hint">Проверять:</span>
+          <label class="check"><input type="checkbox" id="suCap" checked> крышку</label>
+          <label class="check"><input type="checkbox" id="suLabel" checked> этикетку</label>
+          <label class="check"><input type="checkbox" id="suLevel" checked> уровень</label>
+        </div>
+        <button id="suMake" class="primary" disabled>Создать рецепт</button>
+        <pre id="suNotes" class="hidden"></pre>
+        <img id="suCheck" class="hidden" alt="">
       </div>
     </div>
   </section>
@@ -127,14 +169,15 @@
   <section id="help" class="tab prose">
     <h3>Стенд за ноль рублей</h3>
     <ol>
-      <li><b>Камера</b> — телефон. Страница открывается по HTTPS, поэтому браузер даст доступ к задней камере.</li>
-      <li><b>Свет</b>: бутылка на фоне равномерно светлого экрана (планшет или монитор с белой картинкой на полной яркости). Он работает как задняя подсветка для уровня. Сбоку — лампа через лист бумаги.</li>
-      <li><b>Положение</b>: бутылка боком, целиком в кадре, по краям кадра виден фон. Телефон закрепить: свет и ракурс не должны меняться между снимками.</li>
+      <li><b>Камера</b> — телефон или веб-камера, закреплённые неподвижно (стопка книг, штатив). Страница открывается по HTTPS, поэтому браузер даст доступ к камере.</li>
+      <li><b>Место бутылки</b> отметить на столе (скотч, обведённый контур дна). Бутылка ставится этикеткой к камере — как её поставит направляющая на конвейере.</li>
+      <li><b>Фон</b> — однотонный и неподвижный: лист картона, ватман, стена. Цвет лучше <b>не как у крышки</b>: для белой крышки — тёмный или цветной фон. Под бутылкой тот же фон, а не пол с рисунком.</li>
+      <li><b>Свет</b> ровный, без солнца из окна. Для уровня прозрачной воды лучше всего подсветка сзади: экран планшета или монитора с белой картинкой за бутылкой.</li>
     </ol>
     <h3>Порядок проверки</h3>
     <ol>
-      <li>Во вкладке «Рецепт» указать диаметр и высоту своей бутылки (с крышкой), примерные зоны крышки, этикетки и уровня.</li>
-      <li>«Разметка» = «годная», снять 20–50 годных бутылок, каждую чуть повернув. «Рецепт» → «Калибровать по годным».</li>
+      <li>Снять годную бутылку → вкладка «Настройка» → обвести бутылку (от верха крышки до дна) и этикетку → «Создать рецепт».</li>
+      <li>«Разметка» = «годная», снять 5–20 годных бутылок (переставляя их на метку). «Рецепт» → «Калибровать по годным»: пороги встанут по разбросу годных.</li>
       <li>Сделать брак руками (открутить крышку, отлить, сдвинуть или снять этикетку) и снимать его с выбранным классом в «Разметке».</li>
       <li>«Метрики» показывают пропуск брака и ложную отбраковку против целей КП. В «Журнале» можно отметить ложные сбросы.</li>
       <li>Режим «тени»: система решает и пишет, но не «сбрасывает» (нет звука и красной вспышки). Так можно сравнить с ручной отбраковкой.</li>

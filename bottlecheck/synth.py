@@ -32,7 +32,8 @@ def _jitter(color, rng, amp):
     return tuple(float(np.clip(c + rng.uniform(-amp, amp), 0, 255)) for c in color)
 
 
-def render(defect: str, rng: np.random.Generator) -> np.ndarray:
+def render(defect: str, rng: np.random.Generator, cap=CAP, label=LABEL, info: dict | None = None):
+    """info — если передан словарь, в него пишутся рамки бутылки и этикетки (x, y, w, h)."""
     ppm = rng.uniform(2.6, 2.9)
     cx = W / 2 + rng.uniform(-25, 25)
     bottom = H - 15 - rng.uniform(0, 10)
@@ -69,7 +70,7 @@ def render(defect: str, rng: np.random.Generator) -> np.ndarray:
             corners.append(px(x * math.cos(a) - y * math.sin(a), c_y + x * math.sin(a) + y * math.cos(a)))
         lmask = np.zeros_like(body)
         cv2.fillPoly(lmask, [np.array(corners, np.int32)], 1)
-        img[(lmask & body) > 0] = _jitter(LABEL, rng, 6)
+        img[(lmask & body) > 0] = _jitter(label, rng, 6)
         org = px(-22, c_y - 4)
         cv2.putText(img, "SLAVDA", (int(org[0]), int(org[1])), cv2.FONT_HERSHEY_DUPLEX,
                     0.024 * ppm * 6, (30, 30, 30), 2, cv2.LINE_AA)
@@ -77,11 +78,24 @@ def render(defect: str, rng: np.random.Generator) -> np.ndarray:
     cv2.polylines(img, [poly], True, EDGE, 2, cv2.LINE_AA)
 
     if defect != "no_cap":
-        color = WRONG_CAPS[rng.integers(len(WRONG_CAPS))] if defect == "cap_color" else CAP
+        wrong = [c for c in WRONG_CAPS if np.abs(np.subtract(c, cap)).sum() > 120]
+        color = wrong[rng.integers(len(wrong))] if defect == "cap_color" else cap
         p0, p1 = px(-15, 205), px(15, 190)
         cv2.rectangle(img, (int(p0[0]), int(p0[1])), (int(p1[0]), int(p1[1])),
                       _jitter(color, rng, 8), -1)
+        rib = tuple(0.8 * c for c in color)  # рифление крышки, как у настоящей
+        for xm in np.arange(-13.5, 14, 2.5):
+            xr = int(px(xm, 0)[0])
+            cv2.line(img, (xr, int(p0[1]) + 2), (xr, int(p1[1]) - 3), rib, 1)
+        cv2.line(img, (int(p0[0]), int(p1[1]) - 2), (int(p1[0]), int(p1[1]) - 2), rib, 1)
 
+    if info is not None:
+        x0, y0 = px(-32.5, 205)
+        x1, y1 = px(32.5, 0)
+        info["bottle"] = (int(x0), int(y0), int(x1 - x0), int(y1 - y0))
+        lx0, ly0 = px(-32.5, 110)
+        lx1, ly1 = px(32.5, 40)
+        info["label"] = (int(lx0), int(ly0), int(lx1 - lx0), int(ly1 - ly0))
     noisy = img.astype(np.float32) + rng.normal(0, 2.0, img.shape)
     return np.clip(noisy, 0, 255).astype(np.uint8)
 
