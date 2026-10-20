@@ -12,7 +12,7 @@ from dataclasses import asdict
 import cv2
 import numpy as np
 
-from . import reference, simulator, synth, vision
+from . import decide, reference, simulator, synth, tradeoff, vision
 from .calibrate import calibrate
 from .evaluate import evaluate_rows
 from .inspection import REASONS, annotate, inspect
@@ -153,3 +153,24 @@ def sim_batch(start: int, count: int, params_json: str, recipe_json: str) -> str
 def inspect_url(raw_url: str, recipe_json: str) -> str:
     """Проверка кадра, пришедшего как data-URL (кадры виртуальной камеры 3D-линии)."""
     return json.dumps(_result(_from_url(raw_url), json.loads(recipe_json)), ensure_ascii=False)
+
+
+def inspect_multi(raw_urls_json: str, recipe_json: str) -> str:
+    """Кадры нескольких камер одной бутылки -> общее решение (decide.combine)."""
+    recipe = json.loads(recipe_json)
+    cams = [_result(_from_url(u), recipe) for u in json.loads(raw_urls_json)]
+    d = decide.combine([c["measurements"] for c in cams], recipe)
+    return json.dumps({"ok": not d["reasons"], "reasons": d["reasons"], "primary": d["primary"],
+                       "label_cam": d["label_cam"], "cams": cams,
+                       "image": cams[d["label_cam"] if d["label_cam"] is not None else d["primary"]]["image"],
+                       "measurements": [c["measurements"] for c in cams]}, ensure_ascii=False)
+
+
+def tradeoff_json(rows_json: str, recipe_json: str, params_json: str) -> str:
+    p = json.loads(params_json)
+    return json.dumps(tradeoff.sweep(json.loads(rows_json), json.loads(recipe_json), p["prevalence"],
+                                     p["cost_false"], p["cost_miss"]), ensure_ascii=False)
+
+
+def scale_recipe_json(recipe_json: str, s: float) -> str:
+    return json.dumps(tradeoff.scale(json.loads(recipe_json), float(s)), ensure_ascii=False)

@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from . import decide
+
 
 def to_lab(bgr: np.ndarray) -> np.ndarray:
     """BGR uint8 -> CIE Lab float32 (L 0..100)."""
@@ -156,15 +158,10 @@ def level_ambiguity(lab, geo: Geometry, c: dict) -> float:
 def check_level(lab, geo: Geometry, c: dict) -> Check:
     level, contrast, rect = measure_level(lab, geo, c)
     chk = Check("level", True, values={"contrast": round(contrast, 1)}, rect=rect)
-    if level is None:
-        chk.ok, chk.reasons = False, ["level_not_found"]
-        return chk
-    dev = level - c["target_mm"]
-    chk.values.update(level_mm=round(level, 1), dev_mm=round(dev, 1))
-    if dev < -c["tol_mm"]:
-        chk.ok, chk.reasons = False, ["level_low"]
-    elif dev > c["tol_mm"]:
-        chk.ok, chk.reasons = False, ["level_high"]
+    if level is not None:
+        chk.values.update(level_mm=round(level, 1), dev_mm=round(level - c["target_mm"], 1))
+    chk.reasons = decide.level(chk.values, c)
+    chk.ok = not chk.reasons
     return chk
 
 

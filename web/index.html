@@ -32,6 +32,7 @@
   <button data-tab="conveyor">Конвейер</button>
   <button data-tab="sim">Симулятор</button>
   <button data-tab="sim3d">3D-линия</button>
+  <button data-tab="calc">Расчёт</button>
   <button data-tab="recipe">Рецепт</button>
   <button data-tab="help">Как снимать</button>
 </nav>
@@ -248,6 +249,10 @@
         <div class="form">
           <label>Доля брака <input id="s3rate" type="number" value="0.25" step="0.05" min="0" max="1"></label>
           <label>Поворот вокруг оси, ±° <input id="s3rot" type="number" value="15" min="0" max="180"></label>
+          <label>Камер вокруг бутылки
+            <select id="s3cams"><option value="1" selected>1</option><option value="2">2 (0° и 180°)</option><option value="3">3 (через 120°)</option><option value="4">4 (через 90°)</option></select></label>
+          <label>Сила брака
+            <select id="s3sev"><option value="clear">явный (1,5–3 допуска)</option><option value="edge">пограничный (1,1–1,6 допуска)</option></select></label>
           <label class="check"><input type="checkbox" id="s3back" checked> подсветка сзади</label>
         </div>
         <div id="s3defects" class="row"></div>
@@ -277,6 +282,65 @@
     </div>
     <h3>Ошибки</h3>
     <div id="s3errors" class="cards"></div>
+
+    <h3>Карта надёжности</h3>
+    <p class="hint">Прогон без анимации по сетке «поворот бутылок × число камер»: для каждой клетки камера заново снимает эталон и калибруется, затем проверяет бутылки (половина с браком из отмеченных видов). Подсветка, сила брака и шаг — из настроек выше. Лента и сбрасыватель здесь не участвуют.</p>
+    <div class="form">
+      <label>Повороты, ±° <input id="s3mapRot" type="text" value="0, 30, 90, 180"></label>
+      <label>Камер <input id="s3mapCams" type="text" value="1, 2, 3, 4"></label>
+      <label>Бутылок в клетке <input id="s3mapN" type="number" value="30" min="6"></label>
+      <button id="s3map">Построить карту</button>
+    </div>
+    <table id="s3mapTable" class="tbl map"></table>
+
+    <h3>Порог: пропуск брака или ложный сброс</h3>
+    <p class="hint">Камера при текущих настройках снимает выборку бутылок (половина с браком), замеры сохраняются, дальше допуски перебираются мгновенно. Потери считаются на 1000 бутылок при реальной доле брака на линии.</p>
+    <div class="form">
+      <label>Бутылок в выборке <input id="s3tN" type="number" value="150" min="20"></label>
+      <label>Брака на линии, % <input id="s3tPrev" type="number" value="1" step="0.1" min="0"></label>
+      <label>Цена ложного сброса, ₽ <input id="s3tCostF" type="number" value="40"></label>
+      <label>Цена пропущенного брака, ₽ <input id="s3tCostM" type="number" value="2000"></label>
+      <button id="s3tCollect">Собрать замеры</button>
+      <button id="s3tApply" disabled>Применить к рецепту 3D</button>
+    </div>
+    <canvas id="s3tPlot" class="plot"></canvas>
+    <table id="s3tTable" class="tbl"></table>
+    <p id="s3tNote" class="hint"></p>
+  </section>
+
+  <section id="calc" class="tab">
+    <p class="lead">Расчёт станции контроля по производительности линии: такт, камера и объектив, выдержка, вычислитель, пневмосбрасыватель и где его ставить. Результат — требования к оборудованию; кнопка внизу переносит скорость, шаг и расстояние в 3D-линию.</p>
+    <div class="simgrid">
+      <fieldset>
+        <legend>Линия и бутылка</legend>
+        <div class="form">
+          <label>Производительность, бут/ч <input id="kRate" type="number" value="6000"></label>
+          <label>Шаг между бутылками, мм <input id="kPitch" type="number" value="150"></label>
+          <label>Диаметр бутылки, мм <input id="kD" type="number" value="88"></label>
+          <label>Высота бутылки, мм <input id="kH" type="number" value="352"></label>
+          <label>Точность контроля, мм <input id="kAcc" type="number" value="1" step="0.1"></label>
+          <label>Проскальзывание СКО, мм <input id="kSlip" type="number" value="2" step="0.5"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Оборудование</legend>
+        <div class="form">
+          <label>Сенсор камеры <select id="kSensor"></select></label>
+          <label>Рабочее расстояние, мм <input id="kWD" type="number" value="600"></label>
+          <label>Камер на бутылку <input id="kCams" type="number" value="3" min="1" max="6"></label>
+          <label>Допустимый смаз, px <input id="kBlur" type="number" value="1" step="0.5"></label>
+          <label>Проверка кадра, мс <input id="kProc" type="number" value="40"></label>
+          <label>Срабатывание клапана, мс <input id="kValve" type="number" value="15"></label>
+          <label>Скорость штока, м/с <input id="kRod" type="number" value="1" step="0.1"></label>
+        </div>
+        <p class="hint">Проверка кадра: в браузере (Pyodide) 130–300 мс, на промышленном ПК с OpenCV — обычно 20–50 мс.</p>
+      </fieldset>
+    </div>
+    <table id="kOut" class="tbl calc"></table>
+    <div class="row">
+      <button id="kTo3d" class="primary">Перенести в 3D-линию</button>
+      <span class="hint">скорость ленты, шаг, расстояние до сбрасывателя и число камер</span>
+    </div>
   </section>
 
   <section id="recipe" class="tab">

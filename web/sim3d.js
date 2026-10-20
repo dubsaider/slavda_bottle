@@ -12,6 +12,12 @@ const TRIGGER = 160;              // датчик запуска камеры, �
 const DEFECTS3D = ["no_cap", "cap_color", "level_low", "level_high", "no_label", "label_skew", "label_shift", "fallen"];
 const LABELS3D = { ...TRUTH_LABELS, fallen: "упавшая бутылка" };
 const WRONG_CAPS = [0x2563eb, 0xdc2626, 0x16a34a, 0xeab308, 0x111111];
+// Расстановка камер вокруг бутылки (азимут, °; 0 — сбоку, со стороны сбрасывателя).
+// 90° и 270° — это вдоль ленты, туда камеру не поставить.
+const LAYOUTS = { 1: [0], 2: [0, 180], 3: [0, 120, 240], 4: [45, 135, 225, 315] };
+const SPAN = 140;                 // развёртка печати со снимка, °: края цилиндра на фото затенены
+const PRINTS = [0, SPAN];         // середины двух копий печати на этикетке, °
+const SEVERITY = { clear: [1.5, 3.0], edge: [1.1, 1.6] };
 
 const $ = (id) => document.getElementById(id);
 const el = {};
@@ -77,19 +83,29 @@ async function loadSource() {
   for (let i = 0; i < cd.length; i += 4) for (let k = 0; k < 3; k++) rgb[k] += cd[i + k];
   const capColor = new THREE.Color(rgb[0] / (cd.length / 4) / 255, rgb[1] / (cd.length / 4) / 255, rgb[2] / (cd.length / 4) / 255);
   const lt = Math.round(row(r.label.top_mm)), lb = Math.round(row(r.label.bottom_mm));
-  // На снимке цилиндр виден в проекции: столбец x = cx + R·sin(θ). Разворачиваем ±80°,
+  // На снимке цилиндр виден в проекции: столбец x = cx + R·sin(θ). Разворачиваем ±SPAN/2,
   // печать повторяем с двух сторон бутылки, между ними полоса склейки.
-  const front = 300, total = Math.round(front * 360 / 160);
+  const front = 300, total = Math.round(front * 360 / SPAN);
   const lab = document.createElement("canvas");
   lab.width = total;
   lab.height = lb - lt;
   const lg = lab.getContext("2d");
   for (let u = 0; u < front; u++) {
-    const th = (-80 + 160 * (u + 0.5) / front) * Math.PI / 180;
+    const th = (-SPAN / 2 + SPAN * (u + 0.5) / front) * Math.PI / 180;
     const sx = cx + (w / 2) * Math.sin(th);
     for (const off of [0, front]) lg.drawImage(c, sx, lt, 1, lb - lt, u + off, 0, 1, lb - lt);
   }
-  const seam = lg.getImageData(2 * front - 1, 0, 1, lb - lt);
+  // склейка — фон этикетки: медиана каждой строки (полосы сохраняются, текст — нет)
+  const fr = lg.getImageData(0, 0, front, lb - lt).data, seam = lg.createImageData(1, lb - lt);
+  for (let y = 0; y < lb - lt; y++) {
+    for (let k = 0; k < 3; k++) {
+      const vals = [];
+      for (let u = 0; u < front; u++) vals.push(fr[(y * front + u) * 4 + k]);
+      vals.sort((a, b) => a - b);
+      seam.data[y * 4 + k] = vals[vals.length >> 1];
+    }
+    seam.data[y * 4 + 3] = 255;
+  }
   for (let u = 2 * front; u < total; u++) lg.putImageData(seam, u, 0);
   return {
     sku: r.sku, D, H, capH, capD, capColor, label: { top: r.label.top_mm, bottom: r.label.bottom_mm, canvas: lab },
@@ -166,7 +182,7 @@ function buildAssets(s) {
     bodyMat: new THREE.MeshStandardMaterial({ color: 0xe6eef2, transparent: true, opacity: 0.22, roughness: 0.08, side: THREE.DoubleSide, depthWrite: false }),
     water,
     waterMat: new THREE.MeshStandardMaterial({ color: 0xa9cbd9, transparent: true, opacity: 0.32, roughness: 0.05, depthWrite: false }),
-    label: new THREE.CylinderGeometry((s.D / 2 + 0.4) * MM, (s.D / 2 + 0.4) * MM, labelH * MM, 64, 1, true, -80 * Math.PI / 180),
+    label: new THREE.CylinderGeometry((s.D / 2 + 0.4) * MM, (s.D / 2 + 0.4) * MM, labelH * MM, 64, 1, true, -SPAN / 2 * Math.PI / 180),
     labelMat: new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, side: THREE.DoubleSide }),
     labelH,
     cap: new THREE.CylinderGeometry(s.capD / 2 * MM, s.capD / 2 * MM, s.capH * MM, 48),
@@ -182,7 +198,8 @@ function makeBottle(t, defect, rng, exact = false) {
   // exact — без естественного разброса уровня и этикетки (эталонная бутылка)
   const s = t.src, a = t.assets, jit = exact ? 0 : 1;
   const g = new THREE.Group();
-  const sev = 1.5 + 1.5 * rng();
+  const [lo, hi] = SEVERITY[t.sev || "clear"];
+  const sev = lo + (hi - lo) * rng();
   const sign = rng() < 0.5 ? -1 : 1;
   const lvl = defect === "level_low" ? a.level0 - s.tol.level * sev
     : defect === "level_high" ? a.level0 + Math.min(s.tol.level * sev, s.capH + 18) : a.level0 + jit * gauss() * s.tol.level / 5;
@@ -235,7 +252,6 @@ function buildScene() {
   scene.add(t.statics);
   const rt = new THREE.WebGLRenderTarget(FRAME_W, FRAME_H, { colorSpace: THREE.SRGBColorSpace });
   t.rt = rt;
-  t.inspectCam = new THREE.PerspectiveCamera(25, FRAME_W / FRAME_H, 0.05, 5);
   t.frameCanvas = document.createElement("canvas");
   t.frameCanvas.width = FRAME_W;
   t.frameCanvas.height = FRAME_H;
@@ -287,31 +303,39 @@ function buildLine(t, p) {
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -0.77;
   st.add(floor);
-  // станция камеры: камера сбоку, напротив — панель (подсветка сзади или тёмный фон)
+  // Станции камер: камера, макет и напротив неё панель (подсветка сзади или тёмный фон).
+  // Панель отодвинута за ленту, чтобы бутылки проезжали между ней и камерой.
   const H = s.H * MM;
   const dist = (H * 1.25 / 2) / Math.tan(12.5 * Math.PI / 180);
-  t.inspectCam.position.set(0, H / 2, dist);
-  t.inspectCam.lookAt(0, H / 2, 0);
-  t.inspectCam.updateMatrixWorld();
-  const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.42, H * 1.6),
-    p.backlight ? new THREE.MeshBasicMaterial({ color: 0xf4f6f8 }) : mat(0x34383c));
-  panel.position.set(0, H * 0.7, -(s.D / 2 + 60) * MM);
-  st.add(panel);
-  // макет камеры — там же, где виртуальная камера (сзади неё, чтобы не попадать в кадр)
-  const camBody = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.12), mat(0x1d4ed8, { metalness: 0.3 }));
-  camBody.position.set(0, H / 2, dist + 0.07);
-  st.add(camBody);
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.04, 24), mat(0x111111));
-  lens.rotation.x = Math.PI / 2;
-  lens.position.set(0, H / 2, dist + 0.005);
-  st.add(lens);
-  const cone = new THREE.Mesh(new THREE.ConeGeometry(H * 0.62, dist, 4, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }));
-  cone.rotation.x = -Math.PI / 2;
-  cone.rotation.y = Math.PI / 4;
-  cone.position.set(0, H / 2, dist / 2);
-  t.cone = cone;
-  st.add(cone);
+  t.stations = LAYOUTS[p.cams].map((deg) => {
+    const a = deg * Math.PI / 180, dir = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+    const cam = new THREE.PerspectiveCamera(25, FRAME_W / FRAME_H, 0.05, 5);
+    cam.position.set(dir.x * dist, H / 2, dir.z * dist);
+    cam.lookAt(0, H / 2, 0);
+    cam.updateMatrixWorld();
+    const hw = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.12), mat(0x1d4ed8, { metalness: 0.3 }));
+    body.position.z = 0.07;
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.04, 24), mat(0x111111));
+    lens.rotation.x = Math.PI / 2;
+    lens.position.z = 0.005;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(H * 0.62, dist, 4, 1, true),
+      new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.05, side: THREE.DoubleSide, depthWrite: false }));
+    cone.rotation.x = Math.PI / 2;  // вершина конуса — у камеры
+    cone.rotation.y = Math.PI / 4;
+    cone.position.z = -dist / 2;
+    hw.add(body, lens, cone);
+    hw.position.copy(cam.position);
+    hw.rotation.y = a;
+    const rz = Math.abs(Math.cos(a)) > 0.2 ? (beltW / 2 + 0.03) / Math.abs(Math.cos(a)) : 0.3;
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.42, H * 1.6),
+      p.backlight ? new THREE.MeshBasicMaterial({ color: 0xf4f6f8 }) : mat(0x34383c));
+    panel.position.set(-dir.x * Math.max(rz, (s.D / 2 + 60) * MM), H * 0.7, -dir.z * Math.max(rz, (s.D / 2 + 60) * MM));
+    panel.rotation.y = a;
+    st.add(hw, panel);
+    return { deg, cam, hw, cone, panel };
+  });
+  t.inspectCam = t.stations[0].cam;
   // Фотодатчики. Датчик запуска стоит на TRIGGER мм раньше камеры (иначе он сам попал бы
   // в кадр), снимок делается по энкодеру, когда бутылка доехала до оси камеры.
   t.beams = [-TRIGGER, p.dist].map((x) => {
@@ -349,7 +373,7 @@ function setView(t, name, p) {
   const H = t.src.H * MM, ex = p.dist * MM;
   const v = {
     overview: [[ex * 0.3, H * 2.2, 1.35], [ex * 0.45, H * 0.3, 0]],
-    camera: [[0, H * 0.55, 0.75], [0, H * 0.5, 0]],
+    camera: [[t.stations[0].cam.position.x * 0.75, H * 0.55, t.stations[0].cam.position.z * 0.75], [0, H * 0.5, 0]],
     ejector: [[ex + 0.35, H * 1.3, 0.55], [ex, H * 0.2, -0.05]],
   }[name];
   t.view.position.set(...v[0]);
@@ -358,15 +382,17 @@ function setView(t, name, p) {
 }
 
 // ---------- кадр виртуальной камеры ----------
-function capture(t) {
-  const { renderer, scene, inspectCam, rt, frameCanvas } = t;
-  t.cone.visible = false;
+function capture(t, k = 0) {
+  // Камера k снимает так, будто у каждой станции свой закрытый тоннель:
+  // чужие камеры и панели в кадр не попадают, соседние бутылки — попадают.
+  const { renderer, scene, rt, frameCanvas } = t;
+  t.stations.forEach((st, i) => { st.hw.visible = false; st.panel.visible = i === k; });
   renderer.setRenderTarget(rt);
-  renderer.render(scene, inspectCam);
+  renderer.render(scene, t.stations[k].cam);
   const px = new Uint8Array(FRAME_W * FRAME_H * 4);
   renderer.readRenderTargetPixels(rt, 0, 0, FRAME_W, FRAME_H, px);
   renderer.setRenderTarget(null);
-  t.cone.visible = true;
+  t.stations.forEach((st) => { st.hw.visible = true; st.panel.visible = true; });
   const g = frameCanvas.getContext("2d");
   const img = g.createImageData(FRAME_W, FRAME_H);
   const row = FRAME_W * 4;
@@ -390,11 +416,15 @@ async function makeReference(t, p) {
   const s = t.src, R = s.D / 2 * MM;
   status("Снимаю эталон: годная бутылка этикеткой к камере…");
   const ref = makeBottle(t, "ok", Math.random, true);
+  ref.rotation.y = t.stations[0].deg * Math.PI / 180;
   t.scene.add(ref);
-  const url = capture(t);
+  const url = capture(t, 0);
   t.scene.remove(ref);
-  const bottle = projectRect(t, [[-R, 0, 0], [R, 0, 0], [-R, s.H * MM, 0], [R, s.H * MM, 0]]);
-  const label = projectRect(t, [[-R, s.label.bottom * MM, 0], [R, s.label.top * MM, 0]]);
+  // рамки в кадре камеры 0: контур бутылки в плоскости, перпендикулярной лучу зрения
+  const a = t.stations[0].deg * Math.PI / 180, ux = Math.cos(a), uz = -Math.sin(a);
+  const side = (k, y) => [k * R * ux, y, k * R * uz];
+  const bottle = projectRect(t, [side(-1, 0), side(1, 0), side(-1, s.H * MM), side(1, s.H * MM)]);
+  const label = projectRect(t, [side(-1, s.label.bottom * MM), side(1, s.label.top * MM)]);
   const params = {
     bottle, label, diameter_mm: s.D, cap_diameter_mm: s.capD, cap_height_mm: s.capH, sku: "3D: " + s.sku,
     checks: { cap: { enabled: true }, label: { enabled: true }, level: { enabled: true } },
@@ -402,13 +432,14 @@ async function makeReference(t, p) {
   const { result: made } = await py("make_reference_json", url, JSON.stringify(params));
   if (made.error) throw new Error(made.error);
   status("Калибрую по 12 годным бутылкам с тем же разбросом, что на ленте…");
+  // В калибровку идёт кадр той камеры, которая лучше видит этикетку, — как и в решении.
   const urls = [];
   for (let i = 0; i < 12; i++) {
     const b = makeBottle(t, "ok", Math.random);
-    b.rotation.y = (Math.random() * 2 - 1) * p.rot * Math.PI / 180;
+    b.rotation.y = randomRotation(p);
     b.position.z = gauss() * 1.5 * MM;
     t.scene.add(b);
-    urls.push(capture(t));
+    urls.push(capture(t, labelCamera(t, b.rotation.y)));
     t.scene.remove(b);
   }
   const { result: cal } = await py("calibrate_json", JSON.stringify(urls), JSON.stringify(made.recipe));
@@ -417,6 +448,22 @@ async function makeReference(t, p) {
   el.ref.className = "last";
   el.ref.innerHTML = `<div>${made.notes.map(esc).join("<br>") || "Эталон снят."}</div>
     <pre class="small">${esc(cal.report)}</pre><img src="${made.check.image}" alt="">`;
+}
+
+function randomRotation(p) {
+  return (Math.random() * 2 - 1) * p.rot * Math.PI / 180;
+}
+
+function labelCamera(t, rotation) {
+  // камера, ближе всего к которой повёрнута одна из копий печати
+  const wrap = (d) => Math.abs(((d % 360) + 540) % 360 - 180);
+  const deg = rotation * 180 / Math.PI;
+  let best = 0, bestD = 1e9;
+  t.stations.forEach((st, i) => PRINTS.forEach((c) => {
+    const d = wrap(st.deg - (deg + c));
+    if (d < bestD) { bestD = d; best = i; }
+  }));
+  return best;
 }
 
 // ---------- прогон ----------
@@ -428,31 +475,43 @@ function params() {
     speed: Math.max(10, +el.speed.value), gap: [lo, hi], rate: +el.rate.value, rot: Math.max(0, +el.rot.value),
     backlight: el.backlight.checked, dist: Math.max(300, +el.dist.value), win: +el.win.value, slip: +el.slip.value,
     lat: Math.max(0, +el.lat.value) / 1000, shadow: $("shadow").checked,
+    cams: Math.min(4, Math.max(1, +el.cams.value || 1)), sev: el.sev.value,
     defects: [...document.querySelectorAll("#s3defects input:checked")].map((x) => x.value),
   };
+}
+
+async function ensureReady(p) {
+  status("Загрузка Python и OpenCV в фоновом потоке…");
+  await startWorker();
+  if (!three) {
+    three = buildScene();
+    resize(three);
+    requestAnimationFrame(loop);
+  }
+  if (!three.src) {
+    three.src = await loadSource();
+    three.assets = buildAssets(three.src);
+  }
+  three.sev = p.sev;
+  const key = JSON.stringify([p.rot, p.backlight, p.dist, p.cams]);
+  if (!recipe3d || refKey !== key) {
+    buildLine(three, p);
+    await makeReference(three, p);
+    refKey = key;
+  }
+}
+
+function stopRun() {
+  if (run) run.bottles.forEach((b) => three.scene.remove(b.g));
+  run = null;
+  el.play.textContent = "▶ Пуск";
 }
 
 async function start() {
   const p = params();
   el.play.disabled = true;
   try {
-    status("Загрузка Python и OpenCV в фоновом потоке…");
-    await startWorker();
-    if (!three) {
-      three = buildScene();
-      resize(three);
-      requestAnimationFrame(loop);
-    }
-    if (!three.src) {
-      three.src = await loadSource();
-      three.assets = buildAssets(three.src);
-    }
-    const key = JSON.stringify([p.rot, p.backlight, p.dist]);
-    if (!recipe3d || refKey !== key) {
-      buildLine(three, p);
-      await makeReference(three, p);
-      refKey = key;
-    }
+    await ensureReady(p);
     run = {
       p, t: 0, S: 0, nextS: 0, n: 0, bottles: [], tracker: new SimTracker(p.dist, p.win, p.shadow),
       out: {}, byClass: {}, errors: [], inflight: 0, ms: [], piston: 0, bin: 0,
@@ -472,19 +531,178 @@ async function start() {
 
 function status(text) { el.status.textContent = text; }
 
-function spawn(r) {
-  const p = r.p, list = p.defects.length ? p.defects : [];
-  const defect = list.length && Math.random() < p.rate ? list[Math.floor(Math.random() * list.length)] : "ok";
+function pickDefect(p) {
+  const list = p.defects;
+  return list.length && Math.random() < p.rate ? list[Math.floor(Math.random() * list.length)] : "ok";
+}
+
+function createBottle(p, defect) {
   const g = makeBottle(three, defect === "fallen" ? "ok" : defect, Math.random);
-  const b = { id: r.n++, defect, g, spawnS: r.S, slip: gauss() * p.slip, cam: false, ej: false, push: 0 };
-  g.rotation.y = (Math.random() * 2 - 1) * p.rot * Math.PI / 180;
+  g.rotation.y = randomRotation(p);
   if (defect === "fallen") {
     g.rotation.set(0, 0, Math.PI / 2);
     g.position.y = three.src.D / 2 * MM;
   }
   g.position.z = gauss() * 1.5 * MM;
   three.scene.add(g);
-  r.bottles.push(b);
+  return g;
+}
+
+function spawn(r) {
+  const defect = pickDefect(r.p);
+  const g = createBottle(r.p, defect);
+  r.bottles.push({ id: r.n++, defect, g, spawnS: r.S, slip: gauss() * r.p.slip, cam: false, ej: false, push: 0 });
+}
+
+// ---------- прогон без ленты: только камеры и решение ----------
+async function batch(p, n, progress) {
+  // Бутылка ставится к камерам, с годными соседями на среднем шаге (их видно
+  // в кадре наклонных камер), снимается всеми камерами; проверки идут очередью в фоне.
+  const pitch = (p.gap[0] + p.gap[1]) / 2 * MM;
+  const jobs = [];
+  let done = 0;
+  for (let i = 0; i < n; i++) {
+    const defect = pickDefect(p);
+    const g = createBottle(p, defect);
+    if (defect === "fallen") g.position.x = three.src.H / 2 * MM;
+    const nb = [-1, 1].map((k) => { const x = createBottle(p, "ok"); x.position.x = k * pitch; return x; });
+    const urls = three.stations.map((_, k) => capture(three, k));
+    [g, ...nb].forEach((x) => three.scene.remove(x));
+    jobs.push(py("inspect_multi", JSON.stringify(urls), JSON.stringify(recipe3d)).then(({ result }) => {
+      progress(++done, n);
+      return { truth: defect, result };
+    }));
+    if (i % 4 === 3) await new Promise((res) => setTimeout(res, 0));
+  }
+  return Promise.all(jobs);
+}
+
+function rates(rows) {
+  const bad = rows.filter((r) => r.truth !== "ok"), good = rows.filter((r) => r.truth === "ok");
+  return {
+    missed: bad.length ? bad.filter((r) => r.result.ok).length / bad.length : 0,
+    false: good.length ? good.filter((r) => !r.result.ok).length / good.length : 0,
+    bad: bad.length, good: good.length,
+  };
+}
+
+const pct = (v) => (100 * v).toFixed(v > 0 && v < 0.1 ? 1 : 0) + "%";
+
+async function runMap() {
+  const list = (v) => v.split(/[,; ]+/).map(Number).filter((x) => Number.isFinite(x));
+  const rots = list(el.mapRot.value), cams = list(el.mapCams.value).filter((c) => LAYOUTS[c]);
+  const n = Math.max(6, +el.mapN.value || 30);
+  if (!rots.length || !cams.length) return;
+  el.map.disabled = true;
+  stopRun();
+  const cell = (r, c) => `m_${r}_${c}`.replace(/\W/g, "_");
+  el.mapTable.innerHTML = "<tr><th>Поворот ±° \\ камер</th>" + cams.map((c) => `<th>${c}</th>`).join("") + "</tr>" +
+    rots.map((r) => `<tr><td>±${r}°</td>` + cams.map((c) => `<td id="${cell(r, c)}" class="mcell">…</td>`).join("") + "</tr>").join("");
+  const t0 = performance.now();
+  let k = 0;
+  try {
+    for (const r of rots) {
+      for (const c of cams) {
+        const p = { ...params(), rot: r, cams: c, rate: 0.5 };
+        refKey = "";
+        await ensureReady(p);
+        const rows = await batch(p, n, (d, total) => status(`Карта: поворот ±${r}°, камер ${c}: ${d}/${total}`));
+        const m = rates(rows);
+        const td = document.getElementById(cell(r, c));
+        const worst = Math.max(m.missed, m.false);
+        td.className = "mcell " + (worst === 0 ? "good" : worst < 0.05 ? "warn" : "bad");
+        td.innerHTML = `пропуск ${pct(m.missed)}<br>ложн. ${pct(m.false)}`;
+        k++;
+        const left = (performance.now() - t0) / k * (rots.length * cams.length - k) / 1000;
+        status(`Карта: готово ${k} из ${rots.length * cams.length}, осталось ≈ ${Math.ceil(left / 60)} мин`);
+      }
+    }
+    status("Карта готова. Каждая клетка — " + n + " бутылок, половина с браком; лента не участвует, только камеры и решение.");
+  } catch (e) {
+    console.error(e);
+    status("Ошибка: " + e.message);
+  } finally {
+    refKey = "";  // следующий пуск снимет эталон под текущие настройки
+    el.map.disabled = false;
+  }
+}
+
+// ---------- выбор порога: пропуск против ложного сброса ----------
+let tRows = null;
+
+async function collectTradeoff() {
+  el.tCollect.disabled = true;
+  stopRun();
+  try {
+    const p = { ...params(), rate: 0.5 };
+    await ensureReady(p);
+    const n = Math.max(20, +el.tN.value || 150);
+    const rows = await batch(p, n, (d, total) => status(`Замеры для выбора порога: ${d}/${total}`));
+    tRows = rows.map((r) => ({ truth: r.truth, cams: r.result.measurements }));
+    status(`Собрано ${n} бутылок при текущих настройках.`);
+    await updateTradeoff();
+  } catch (e) {
+    console.error(e);
+    status("Ошибка: " + e.message);
+  } finally {
+    el.tCollect.disabled = false;
+  }
+}
+
+async function updateTradeoff() {
+  if (!tRows) return;
+  const prm = { prevalence: Math.max(0, +el.tPrev.value) / 100, cost_false: +el.tCostF.value, cost_miss: +el.tCostM.value };
+  const { result } = await py("tradeoff_json", JSON.stringify(tRows), JSON.stringify(recipe3d), JSON.stringify(prm));
+  el.tApply.disabled = false;
+  el.tApply.dataset.s = result.best;
+  el.tApply.textContent = `Применить строгость ×${result.best} к рецепту 3D`;
+  el.tTable.innerHTML = "<tr><th>Допуски ×</th><th>Пропуск брака</th><th>Ложный сброс</th><th>Потери на 1000 бутылок</th></tr>" +
+    result.points.map((q) => `<tr class="${q.s === result.best ? "best" : ""}"><td>${q.s}${q.s === 1 ? " (как сейчас)" : ""}</td><td>${pct(q.missed)}</td><td>${pct(q.false)}</td><td>${Math.round(q.cost).toLocaleString("ru-RU")} ₽</td></tr>`).join("");
+  plotTradeoff(result);
+  const b = result.points.find((q) => q.s === result.best);
+  el.tNote.textContent = `При доле брака на линии ${(prm.prevalence * 100).toFixed(1)}% выгоднее всего допуски ×${result.best}: ` +
+    `пропуск ${pct(b.missed)}, ложный сброс ${pct(b.false)}. Выборка — ${tRows.length} бутылок, ` +
+    `поэтому доли меньше ${(100 / Math.max(1, b.bad)).toFixed(0)}% пропуска и ${(100 / Math.max(1, b.good)).toFixed(0)}% ложных сбросов она не различает.`;
+}
+
+function plotTradeoff(res) {
+  const cv = el.tPlot, dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = 260;
+  cv.width = W * dpr;
+  cv.height = H * dpr;
+  cv.style.height = H + "px";
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const css = getComputedStyle(document.documentElement), col = (n) => css.getPropertyValue(n).trim();
+  const m = { l: 48, r: 12, t: 12, b: 36 };
+  const maxX = Math.max(0.05, ...res.points.map((q) => q.false)), maxY = Math.max(0.05, ...res.points.map((q) => q.missed));
+  const X = (v) => m.l + v / maxX * (W - m.l - m.r), Y = (v) => H - m.b - v / maxY * (H - m.t - m.b);
+  g.strokeStyle = col("--line");
+  g.fillStyle = col("--muted");
+  g.font = "12px system-ui";
+  g.beginPath(); g.moveTo(m.l, m.t); g.lineTo(m.l, H - m.b); g.lineTo(W - m.r, H - m.b); g.stroke();
+  g.fillText("ложный сброс годных →", W - 160, H - 8);
+  g.save(); g.translate(14, H - m.b); g.rotate(-Math.PI / 2); g.fillText("пропуск брака →", 0, 0); g.restore();
+  g.fillText("0", m.l - 12, H - m.b + 14);
+  g.fillText(pct(maxX), W - m.r - 30, H - m.b + 14);
+  g.fillText(pct(maxY), 6, m.t + 10);
+  g.strokeStyle = col("--accent");
+  g.beginPath();
+  res.points.forEach((q, i) => (i ? g.lineTo(X(q.false), Y(q.missed)) : g.moveTo(X(q.false), Y(q.missed))));
+  g.stroke();
+  // точки с одинаковым итогом подписываем одной меткой «×a–b»
+  const groups = [];
+  for (const q of res.points) {
+    const last = groups[groups.length - 1];
+    if (last && Math.hypot(X(q.false) - X(last[0].false), Y(q.missed) - Y(last[0].missed)) < 8) last.push(q);
+    else groups.push([q]);
+  }
+  for (const grp of groups) {
+    const q = grp[0], best = grp.some((x) => x.s === res.best);
+    g.fillStyle = best ? col("--ok") : grp.some((x) => x.s === 1) ? col("--ink") : col("--accent");
+    g.beginPath(); g.arc(X(q.false), Y(q.missed), best ? 6 : 4, 0, 2 * Math.PI); g.fill();
+    const lab = "×" + q.s + (grp.length > 1 ? "–" + grp[grp.length - 1].s : "");
+    g.fillText(lab, Math.min(X(q.false) + 6, W - m.r - g.measureText(lab).width), Y(q.missed) - 6);
+  }
 }
 
 function bx(r, b) {
@@ -542,11 +760,11 @@ function step(r, dt) {
 }
 
 function shoot(r, b) {
-  const url = capture(three);
+  const urls = three.stations.map((_, k) => capture(three, k));
   const t0 = r.t;
   r.inflight++;
   b.flash = 0.2;
-  py("inspect_url", url, JSON.stringify(recipe3d)).then(({ result, ms }) => {
+  py("inspect_multi", JSON.stringify(urls), JSON.stringify(recipe3d)).then(({ result, ms }) => {
     r.inflight--;
     r.ms.push(ms);
     if (r.ms.length > 30) r.ms.shift();
@@ -638,6 +856,10 @@ export function mount() {
     stats: $("s3stats"), table: $("s3table"), errors: $("s3errors"), ref: $("s3ref"), play: $("s3play"),
     speed: $("s3speed"), gap: $("s3gap"), rate: $("s3rate"), rot: $("s3rot"), backlight: $("s3back"),
     dist: $("s3dist"), win: $("s3win"), slip: $("s3slip"), lat: $("s3lat"), speedup: $("s3speedup"),
+    cams: $("s3cams"), sev: $("s3sev"),
+    map: $("s3map"), mapRot: $("s3mapRot"), mapCams: $("s3mapCams"), mapN: $("s3mapN"), mapTable: $("s3mapTable"),
+    tCollect: $("s3tCollect"), tApply: $("s3tApply"), tN: $("s3tN"), tPrev: $("s3tPrev"), tCostF: $("s3tCostF"),
+    tCostM: $("s3tCostM"), tPlot: $("s3tPlot"), tTable: $("s3tTable"), tNote: $("s3tNote"),
   });
   $("s3defects").innerHTML = '<span class="hint">Виды брака:</span>' + DEFECTS3D.map((d) =>
     `<label class="check"><input type="checkbox" value="${d}" checked> ${esc(LABELS3D[d])}</label>`).join("");
@@ -647,10 +869,18 @@ export function mount() {
     el.play.textContent = run.playing ? "⏸ Пауза" : "▶ Пуск";
   });
   $("s3reset").addEventListener("click", () => {
-    if (run) run.bottles.forEach((b) => three.scene.remove(b.g));
-    run = null;
-    el.play.textContent = "▶ Пуск";
+    stopRun();
     start();
+  });
+  el.map.addEventListener("click", runMap);
+  el.tCollect.addEventListener("click", collectTradeoff);
+  [el.tPrev, el.tCostF, el.tCostM].forEach((x) => x.addEventListener("change", updateTradeoff));
+  el.tApply.addEventListener("click", async () => {
+    const s = +el.tApply.dataset.s;
+    ({ result: recipe3d } = await py("scale_recipe_json", JSON.stringify(recipe3d), s));
+    await updateTradeoff();  // кривая — уже относительно нового рецепта
+    el.tApply.disabled = true;
+    el.tApply.textContent = `Рецепт 3D: допуски ×${s} применены`;
   });
   document.querySelectorAll("[data-view3d]").forEach((b) => b.addEventListener("click", () => {
     if (three) setView(three, b.dataset.view3d, run ? run.p : params());

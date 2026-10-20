@@ -16,7 +16,7 @@ import math
 import cv2
 import numpy as np
 
-from . import vision
+from . import decide, vision
 
 REF_H = 400      # высота бутылки в сохранённом эталоне, px
 WORK_H = 140     # высота бутылки при грубом поиске, px
@@ -191,19 +191,13 @@ def check_cap(A, R, geo, c) -> vision.Check:
     lab = vision.to_lab(A[sy:sy + (y1 - y0), sx:sx + (x1 - x0)])
     color = np.median(lab.reshape(-1, 3), axis=0)
     de = float(vision.delta_e(color, c["ref_lab"]))
-    chk.values.update(lab=[round(float(v), 1) for v in color], de=round(de, 1))
-    if shape_ok:
-        if de > c["max_de"]:
-            chk.ok, chk.reasons = False, ["cap_color"]
-        return chk
-    # Форма не та. Если на месте крышки что-то непохожее и на эталон, и на фон
-    # рядом с бутылкой — это крышка другого цвета/типа, иначе крышки нет.
+    # отличие от фона рядом с бутылкой: решает «нет крышки» или «чужая крышка»
     bx0, bx1 = max(0, geo.x - int(0.25 * geo.w)), geo.x - 2
     side = vision.to_lab(A[y0:y1, bx0:bx1]) if bx1 > bx0 else lab
     de_bg = float(vision.delta_e(color, np.median(side.reshape(-1, 3), axis=0)))
-    chk.values["de_bg"] = round(de_bg, 1)
-    chk.ok = False
-    chk.reasons = ["cap_color"] if de > c["max_de"] and de_bg > c["max_de"] else ["no_cap"]
+    chk.values.update(lab=[round(float(v), 1) for v in color], de=round(de, 1), de_bg=round(de_bg, 1))
+    chk.reasons = decide.cap(chk.values, c)
+    chk.ok = not chk.reasons
     return chk
 
 
@@ -274,9 +268,7 @@ def check_label(A, R, geo, c) -> vision.Check:
             best = (float(s), float(ang), loc[1] + ry0 - y0)
     ncc, angle, dy = best
     chk = vision.Check("label", True, values={"ncc": round(ncc, 2)}, rect=rect)
-    if ncc < c["min_ncc"]:
-        chk.ok, chk.reasons = False, ["no_label"]
-        return chk
+    # наклон и сдвиг меряются и без этикетки: по сохранённым замерам потом перебирают пороги
     # Края этикетки точнее поворота картинки: на цилиндре бока этикетки
     # остаются вертикальными, наклоняются только верхний и нижний край.
     # Края на цилиндре видны дугой со своим наклоном — меряем так же на эталоне и вычитаем.
@@ -287,10 +279,7 @@ def check_label(A, R, geo, c) -> vision.Check:
         angle, dy = -(e_angle - r_angle), e_dy - r_dy
     shift = -dy / geo.px_per_mm
     chk.values.update(angle_deg=round(angle, 1), shift_mm=round(shift, 1))
-    if abs(angle) > c["max_angle_deg"]:
-        chk.reasons.append("label_skew")
-    if abs(shift) > c["shift_tol_mm"]:
-        chk.reasons.append("label_shift")
+    chk.reasons = decide.label(chk.values, c)
     chk.ok = not chk.reasons
     return chk
 
