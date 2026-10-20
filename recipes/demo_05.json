@@ -1,0 +1,49 @@
+{
+  "sku": "demo-0.5-red-cap",
+  "bottle": {
+    "diameter_mm": 65,
+    "height_mm": 205
+  },
+  "locate": {
+    "bg_de": 6,
+    "min_area_frac": 0.02,
+    "edge_px": 6.1
+  },
+  "cap": {
+    "from_mm": 192,
+    "to_mm": 203,
+    "width_mm": 24,
+    "presence_de": 25,
+    "min_fill": 0.5,
+    "ref_lab": [
+      41.8,
+      58.1,
+      38.8
+    ],
+    "max_de": 15
+  },
+  "level": {
+    "search_from_mm": 150,
+    "search_to_mm": 189.5,
+    "strip_mm": 8,
+    "gradient_px": 3,
+    "min_contrast": 4,
+    "target_mm": 177.2,
+    "tol_mm": 4
+  },
+  "label": {
+    "bottom_mm": 40,
+    "top_mm": 110,
+    "width_mm": 55,
+    "search_margin_mm": 15,
+    "ref_lab": [
+      51.4,
+      -42.5,
+      40.0
+    ],
+    "match_de": 20,
+    "min_coverage": 0.6,
+    "max_angle_deg": 3,
+    "shift_tol_mm": 4
+  }
+}
