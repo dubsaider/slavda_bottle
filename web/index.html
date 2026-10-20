@@ -7,6 +7,12 @@
 <meta name="description" content="Прототип видеоконтроля бутылок: проверки крышки, уровня и этикетки в браузере, режим тени, метрики приёмки, модель сбрасывателя.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%225%22 y=%221%22 width=%226%22 height=%223%22 fill=%22%23b91c1c%22/%3E%3Cpath d=%22M6 4h4v3l2 2v6H4V9l2-2z%22 fill=%22%2315803d%22/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+} }
+</script>
 </head>
 <body>
 <header>
@@ -25,6 +31,7 @@
   <button data-tab="metrics">Метрики</button>
   <button data-tab="conveyor">Конвейер</button>
   <button data-tab="sim">Симулятор</button>
+  <button data-tab="sim3d">3D-линия</button>
   <button data-tab="recipe">Рецепт</button>
   <button data-tab="help">Как снимать</button>
 </nav>
@@ -215,6 +222,61 @@
     <h3>Ошибки</h3>
     <p class="hint">Пропущенный брак и сброшенные годные — что именно увидела камера.</p>
     <div id="simErrors" class="cards"></div>
+  </section>
+
+  <section id="sim3d" class="tab">
+    <p class="lead">Линия в 3D. Виртуальная камера снимает каждую бутылку, кадр проверяет тот же код, что и живую камеру (в фоновом потоке, поэтому время проверки — настоящая задержка решения). Эталон камера снимает сама, как наладчик на линии. Мышью или пальцем сцену можно вращать и приближать.</p>
+    <div class="row">
+      <button id="s3play" class="primary">▶ Пуск</button>
+      <button id="s3reset">Заново (с новым эталоном, если менялись поворот, подсветка или расстояние)</button>
+      <label>Время <select id="s3speedup"><option value="0.5">×0,5</option><option value="1" selected>×1</option><option value="2">×2</option></select></label>
+      <span class="hint">Вид:</span>
+      <button data-view3d="overview">общий</button>
+      <button data-view3d="camera">камера</button>
+      <button data-view3d="ejector">сбрасыватель</button>
+    </div>
+    <p id="s3status" class="hint"></p>
+    <div class="s3view">
+      <div id="s3canvas"></div>
+      <div id="s3hud" class="hud"></div>
+      <div id="s3inset" class="inset"></div>
+    </div>
+    <div id="s3stats" class="stats"></div>
+    <div class="simgrid">
+      <fieldset>
+        <legend>Бутылки</legend>
+        <div class="form">
+          <label>Доля брака <input id="s3rate" type="number" value="0.25" step="0.05" min="0" max="1"></label>
+          <label>Поворот вокруг оси, ±° <input id="s3rot" type="number" value="15" min="0" max="180"></label>
+          <label class="check"><input type="checkbox" id="s3back" checked> подсветка сзади</label>
+        </div>
+        <div id="s3defects" class="row"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Лента и сбрасыватель</legend>
+        <div class="form">
+          <label>Скорость ленты, мм/с <input id="s3speed" type="number" value="200"></label>
+          <label>Шаг между бутылками, мм <input id="s3gap" type="text" value="180–260"></label>
+          <label>Камера → сбрасыватель, мм <input id="s3dist" type="number" value="700"></label>
+          <label>Окно совпадения, мм <input id="s3win" type="number" value="25"></label>
+          <label>Проскальзывание СКО, мм <input id="s3slip" type="number" value="2" step="0.5"></label>
+          <label>Мин. задержка решения, мс <input id="s3lat" type="number" value="0"></label>
+        </div>
+      </fieldset>
+    </div>
+    <div class="cam">
+      <div>
+        <h3>Эталон 3D-камеры</h3>
+        <div id="s3ref" class="last empty">Будет снят при первом пуске.</div>
+      </div>
+      <div>
+        <h3>По видам брака</h3>
+        <table id="s3table" class="tbl"></table>
+        <p class="hint">Время ×2 ускоряет ленту, но не проверку кадров: решения будут опаздывать сильнее, чем на реальной скорости.</p>
+      </div>
+    </div>
+    <h3>Ошибки</h3>
+    <div id="s3errors" class="cards"></div>
   </section>
 
   <section id="recipe" class="tab">

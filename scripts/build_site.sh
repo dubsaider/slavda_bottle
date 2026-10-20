@@ -4,7 +4,7 @@ set -eu
 out="${1:-_site}"
 rm -rf "$out"
 mkdir -p "$out/bottlecheck" "$out/recipes"
-cp web/index.html web/app.js web/style.css "$out/"
+cp web/index.html web/*.js web/style.css "$out/"
 cp bottlecheck/*.py "$out/bottlecheck/"
 cp recipes/*.json "$out/recipes/"
 # Версия в ссылках на app.js/style.css, чтобы браузер не держал старую копию из кэша

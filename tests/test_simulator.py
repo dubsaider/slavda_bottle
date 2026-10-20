@@ -69,3 +69,9 @@ def test_web_sim_batch():
                                    json.dumps(WATER)))
     assert [r["truth"] for r in out] == ["no_cap"] * 3
     assert all(not r["ok"] and r["thumb"].startswith("data:image/jpeg") for r in out)
+
+
+def test_web_inspect_url():
+    img, _, _ = simulator.frame(WATER, "no_label", np.random.default_rng(4))
+    out = json.loads(web.inspect_url(web._to_url(img, 92), json.dumps(WATER)))
+    assert not out["ok"] and "no_label" in out["reasons"]
