@@ -88,3 +88,17 @@ textarea { width: 100%; min-height: 420px; background: var(--panel); border: 1px
 #suCheck { max-width: 100%; max-height: 50vh; border-radius: 8px; }
 input[type=text] { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 160px; }
 #suNotes { white-space: pre-wrap; }
+
+.simgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 760px) { .simgrid { grid-template-columns: 1fr; } }
+fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 4px 12px 8px; margin: 0; min-width: 0; }
+legend { font-size: 13px; color: var(--muted); padding: 0 4px; }
+.form select { max-width: 220px; }
+input#simGap { width: 130px; }
+.belt { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px; margin: 12px 0; }
+#simCanvas { width: 100%; height: 300px; display: block; }
+.stat.warn { border-color: var(--bad); background: var(--bad-bg); }
+.tbl { border-collapse: collapse; font-size: 14px; }
+.tbl th, .tbl td { border-bottom: 1px solid var(--line); padding: 4px 10px; text-align: right; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; }
+.tbl tr.bad td { color: var(--bad); }

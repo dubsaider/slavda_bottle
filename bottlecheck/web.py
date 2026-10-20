@@ -12,7 +12,7 @@ from dataclasses import asdict
 import cv2
 import numpy as np
 
-from . import reference, synth, vision
+from . import reference, simulator, synth, vision
 from .calibrate import calibrate
 from .evaluate import evaluate_rows
 from .inspection import REASONS, annotate, inspect
@@ -120,3 +120,31 @@ def make_reference_json(raw_url: str, params_json: str) -> str:
         notes.append("эталонный снимок сам не проходит проверку: " + ", ".join(
             REASONS.get(r, r) for r in check["reasons"]) + " — проверьте рамки")
     return json.dumps({"recipe": recipe, "notes": notes, "check": check}, ensure_ascii=False)
+
+
+def sim_info(recipe_json: str) -> str:
+    """Что симулятор умеет рисовать для текущего рецепта."""
+    recipe = json.loads(recipe_json)
+    b = recipe.get("bottle", {})
+    return json.dumps({"defects": simulator.available(recipe), "reference": recipe.get("mode") == "reference",
+                       "diameter_mm": b.get("diameter_mm", 65), "height_mm": b.get("height_mm", 205)})
+
+
+def sim_batch(start: int, count: int, params_json: str, recipe_json: str) -> str:
+    """Кадры виртуального конвейера: бутылка по эталону -> проверка -> решение."""
+    p, recipe = json.loads(params_json), json.loads(recipe_json)
+    defects = [d for d in p.get("defects", simulator.available(recipe)) if d in simulator.available(recipe)]
+    blur = simulator.blur_px(recipe, p.get("speed_mm_s", 250), p.get("exposure_ms", 1))
+    out = []
+    for i in range(start, start + count):
+        rng = np.random.default_rng([p.get("seed", 0), i])
+        defect = simulator.pick(rng, p.get("defect_rate", 0.3), defects)
+        img, (x, y, w, h), info = simulator.frame(recipe, defect, rng, severity=p.get("severity", "clear"),
+                                                  jitter=p.get("jitter", 1.0), blur_px=blur)
+        m = int(0.02 * h)
+        crop = img[max(0, y - m):y + h + m, max(0, x - m):x + w + m]
+        thumb = cv2.resize(crop, None, fx=160 / crop.shape[0], fy=160 / crop.shape[0], interpolation=cv2.INTER_AREA)
+        r = _result(img, recipe)
+        r.update(truth=defect, info=info, thumb=_to_url(thumb, 85), source=f"sim_{p.get('seed', 0)}_{i:05d}")
+        out.append(r)
+    return json.dumps(out, ensure_ascii=False)

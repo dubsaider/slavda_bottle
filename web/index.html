@@ -24,6 +24,7 @@
   <button data-tab="journal">Журнал <span id="jcount" class="pill">0</span></button>
   <button data-tab="metrics">Метрики</button>
   <button data-tab="conveyor">Конвейер</button>
+  <button data-tab="sim">Симулятор</button>
   <button data-tab="recipe">Рецепт</button>
   <button data-tab="help">Как снимать</button>
 </nav>
@@ -152,6 +153,68 @@
       <button data-preset="slip">сильное проскальзывание</button>
     </div>
     <pre id="cReport">—</pre>
+  </section>
+
+  <section id="sim" class="tab">
+    <p class="lead">Виртуальный конвейер по эталону: из снимка годной бутылки получаются кадры с разбросом и браком. Каждый кадр проходит ту же проверку, что и живая камера, а решение едет по очереди к сбрасывателю.</p>
+    <div class="row">
+      <span id="simRecipe" class="hint"></span>
+      <button id="simWater" disabled>Взять эталон «вода 1,5 л»</button>
+    </div>
+    <div class="simgrid">
+      <fieldset>
+        <legend>Бутылки и камера</legend>
+        <div class="form">
+          <label>Бутылок <input id="simN" type="number" value="60" min="5" max="500"></label>
+          <label>Доля брака <input id="simRate" type="number" value="0.3" step="0.05" min="0" max="1"></label>
+          <label>Сила брака
+            <select id="simSev"><option value="clear">явный (1,5–3 допуска)</option><option value="edge">пограничный (1,1–1,6 допуска)</option></select></label>
+          <label>Разброс положения и света <input id="simJit" type="number" value="1" step="0.25" min="0" max="3"></label>
+          <label>Выдержка камеры, мс <input id="simExp" type="number" value="1" step="0.5" min="0"></label>
+          <label>Seed <input id="simSeed" type="number" value="1"></label>
+        </div>
+        <div id="simDefects" class="row"></div>
+        <div class="row">
+          <button id="simPrep" class="primary" disabled>Подготовить кадры</button>
+          <label class="check"><input type="checkbox" id="simJournal" checked> добавить в журнал</label>
+        </div>
+        <div id="simProgress" class="progress hidden"><div></div></div>
+        <p id="simPrepInfo" class="hint"></p>
+      </fieldset>
+      <fieldset>
+        <legend>Лента и сбрасыватель</legend>
+        <div class="form">
+          <label>Скорость ленты, мм/с <input id="simSpeed" type="number" value="250"></label>
+          <label>Шаг между бутылками, мм <input id="simGap" type="text" value="120–200"></label>
+          <label>Камера → сбрасыватель, мм <input id="simDist" type="number" value="600"></label>
+          <label>Окно совпадения, мм <input id="simWin" type="number" value="25"></label>
+          <label>Задержка решения, мс <input id="simLat" type="number" value="150"></label>
+          <label>Проскальзывание СКО, мм <input id="simSlip" type="number" value="2" step="0.5"></label>
+        </div>
+        <div class="row">
+          <button id="simPlay" disabled>▶ Пуск</button>
+          <button id="simRestart" disabled>Заново на тех же кадрах</button>
+          <label>Показ
+            <select id="simRate2"><option value="0.5">×0,5</option><option value="1" selected>×1</option><option value="2">×2</option><option value="5">×5</option><option value="50">без анимации</option></select></label>
+        </div>
+      </fieldset>
+    </div>
+    <div class="belt"><canvas id="simCanvas"></canvas></div>
+    <div id="simStats" class="stats"></div>
+    <div class="cam">
+      <div>
+        <h3>Последний кадр камеры</h3>
+        <div id="simLast" class="last empty">Подготовьте кадры и нажмите «Пуск».</div>
+      </div>
+      <div>
+        <h3>По видам брака</h3>
+        <table id="simTable" class="tbl"></table>
+        <p id="simNote" class="hint"></p>
+      </div>
+    </div>
+    <h3>Ошибки</h3>
+    <p class="hint">Пропущенный брак и сброшенные годные — что именно увидела камера.</p>
+    <div id="simErrors" class="cards"></div>
   </section>
 
   <section id="recipe" class="tab">
