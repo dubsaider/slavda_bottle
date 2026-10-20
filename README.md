@@ -21,7 +21,32 @@
 | Критерии приёмки | `evaluate` считает пропуск брака по классам и ложную отбраковку против целей КП |
 | PostgreSQL, MinIO, FastAPI, Docker, ONNX/TensorRT | Нет |
 
-## Быстрый старт (без камеры, на синтетике)
+## Веб-версия на GitHub Pages (ничего не устанавливать)
+
+`https://dubsaider.github.io/slavda_bottle/` — тот же пакет `bottlecheck` работает прямо
+в браузере через [Pyodide](https://pyodide.org) (Python + OpenCV в WebAssembly).
+Открывается с телефона, использует его заднюю камеру, ничего не отправляет на сервер.
+
+- **Камера** — «виртуальный фотодатчик»: снимок делается, когда бутылка встаёт по центру.
+  Можно снимать вручную или загружать фото. Сброс обозначается красной вспышкой и звуком.
+- **Синтетика** — демо без камеры.
+- **Журнал** — снимки с причиной и отметки «ложная отбраковка».
+- **Метрики** — критерии приёмки КП по размеченным снимкам.
+- **Конвейер** — модель энкодера и сбрасывателя со сценариями.
+- **Рецепт** — правка рецепта и калибровка по годным бутылкам.
+
+Журнал живёт в вкладке браузера (выгружается в CSV), рецепт хранится в браузере.
+Первая загрузка — около 30 МБ (Pyodide, numpy, OpenCV), дальше они берутся из кэша.
+
+Публикация: workflow `.github/workflows/pages.yml` на каждый push в `main` прогоняет
+тесты, собирает сайт (`scripts/build_site.sh`) и выкладывает его. Один раз нужно включить
+**Settings → Pages → Source: GitHub Actions**.
+
+Локально: `sh scripts/build_site.sh && python -m http.server -d _site 8000`.
+Если CDN jsdelivr недоступен, можно положить Pyodide рядом с сайтом
+(`_site/pyodide/` из [релиза Pyodide 0.27.7](https://github.com/pyodide/pyodide/releases/tag/0.27.7)) и открыть `/?pyodide=/pyodide/`.
+
+## Быстрый старт в командной строке (на синтетике)
 
 ```bash
 pip install -r requirements.txt
@@ -132,6 +157,10 @@ bottlecheck/
   evaluate.py     метрики приёмки из КП
   review.py       дашборд и отметки оператора
   synth.py        синтетические бутылки с дефектами
+  web.py          мост для браузерной версии (Pyodide)
+web/              страница GitHub Pages (index.html, app.js, style.css)
+scripts/build_site.sh
+.github/workflows/pages.yml
 recipes/demo_05.json
 tests/
 ```

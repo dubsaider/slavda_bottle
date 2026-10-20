@@ -24,16 +24,22 @@ def _read(path) -> list[dict]:
 
 def evaluate(journal_path, labels_path) -> tuple[str, bool]:
     truth = {r["file"]: r["defect"] for r in _read(labels_path)}
-    rows = [r for r in _read(journal_path) if r["source"] in truth]
+    rows = [{**r, "truth": truth[r["source"]]} for r in _read(journal_path) if r["source"] in truth]
+    return evaluate_rows(rows)
+
+
+def evaluate_rows(rows: list[dict]) -> tuple[str, bool]:
+    """rows: truth (класс по разметке), verdict ("ok"/"reject"), reasons (список или "a;b")."""
+    rows = [r for r in rows if r.get("truth")]
     if not rows:
-        return "нет пересечения журнала с разметкой", False
+        return "нет размеченных бутылок", False
 
     per = defaultdict(Counter)
     false_rejects = Counter()
     for r in rows:
-        d = truth[r["source"]]
+        d = r["truth"]
         rejected = r["verdict"] == "reject"
-        reasons = r["reasons"].split(";") if r["reasons"] else []
+        reasons = r["reasons"] if isinstance(r["reasons"], list) else [x for x in r["reasons"].split(";") if x]
         per[d]["n"] += 1
         if d == "ok":
             if rejected:

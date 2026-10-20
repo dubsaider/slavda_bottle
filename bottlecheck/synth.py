@@ -86,6 +86,10 @@ def render(defect: str, rng: np.random.Generator) -> np.ndarray:
     return np.clip(noisy, 0, 255).astype(np.uint8)
 
 
+def pick_defect(rng: np.random.Generator, defect_rate: float) -> str:
+    return DEFECTS[1 + rng.integers(len(DEFECTS) - 1)] if rng.random() < defect_rate else "ok"
+
+
 def generate(out_dir, n: int, defect_rate: float = 0.3, seed: int = 0) -> Path:
     """Пишет n снимков и labels.csv (file, defect)."""
     out = Path(out_dir)
@@ -95,7 +99,7 @@ def generate(out_dir, n: int, defect_rate: float = 0.3, seed: int = 0) -> Path:
         w = csv.writer(f)
         w.writerow(["file", "defect"])
         for i in range(n):
-            defect = DEFECTS[1 + rng.integers(len(DEFECTS) - 1)] if rng.random() < defect_rate else "ok"
+            defect = pick_defect(rng, defect_rate)
             name = f"{i:05d}_{defect}.png"
             cv2.imwrite(str(out / name), render(defect, rng))
             w.writerow([name, defect])
