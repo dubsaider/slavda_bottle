@@ -46,7 +46,9 @@ async function boot() {
     await py.loadPackage(["numpy", "opencv-python"]);
     py.FS.mkdirTree("/home/pyodide/bottlecheck");
     for (const m of MODULES) {
-      const src = await (await fetch(`bottlecheck/${m}.py`, { cache: "no-cache" })).text();
+      const res = await fetch(`bottlecheck/${m}.py`, { cache: "no-cache" });
+      if (!res.ok) throw new Error(`не загрузился bottlecheck/${m}.py (HTTP ${res.status})`);
+      const src = await res.text();
       py.FS.writeFile(`/home/pyodide/bottlecheck/${m}.py`, src);
     }
     web = py.pyimport("bottlecheck.web");
