@@ -6,7 +6,7 @@ const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 const pyodideParam = new URLSearchParams(location.search).get("pyodide");
 const PYODIDE_URL = pyodideParam && /^\/?[\w\-\/.]+\/$/.test(pyodideParam) && !pyodideParam.includes("..") && !pyodideParam.startsWith("//")
   ? pyodideParam : PYODIDE_CDN;
-const MODULES = ["__init__", "vision", "inspection", "calibrate", "tracking", "evaluate", "synth", "web"];
+const MODULES = ["__init__", "vision", "inspection", "calibrate", "tracking", "evaluate", "synth", "reference", "web"];
 const RECIPE_KEY = "bottlecheck.recipe";
 const MAX_ROWS = 2000;
 
@@ -54,7 +54,7 @@ async function boot() {
     demoRecipe = await (await fetch("recipes/demo_05.json", { cache: "no-cache" })).text();
     let saved = null;
     try { saved = localStorage.getItem(RECIPE_KEY); } catch (e) { /* приватный режим */ }
-    $("rText").value = saved || demoRecipe;
+    setRecipe(JSON.parse(saved || demoRecipe), false);
     document.querySelectorAll("button:disabled, input:disabled").forEach((el) => (el.disabled = false));
     $("camShot").disabled = true; // до включения камеры
     setStatus("Готово", "ready");
@@ -70,8 +70,26 @@ function setStatus(text, cls = "loading") {
   el.className = "status " + cls;
 }
 
+// Рецепт: полная версия (с эталонным снимком) живёт в recipeStr, в редакторе снимок заменён заглушкой.
+const IMG_PH = "(эталонный снимок хранится отдельно)";
+let recipeStr = "{}";
+let refImage = null;
+
+function setRecipe(obj, persist = true) {
+  if (obj.reference && obj.reference.image && obj.reference.image !== IMG_PH) refImage = obj.reference.image;
+  if (obj.reference && obj.reference.image === IMG_PH) obj.reference.image = refImage;
+  recipeStr = JSON.stringify(obj);
+  const view = JSON.parse(recipeStr);
+  if (view.reference) view.reference.image = IMG_PH;
+  $("rText").value = JSON.stringify(view, null, 2);
+  if (persist) {
+    try { localStorage.setItem(RECIPE_KEY, recipeStr); } catch (e) { /* не критично */ }
+  }
+  $("demoBanner").classList.toggle("hidden", !String(obj.sku || "").startsWith("demo"));
+}
+
 function recipeJson() {
-  return JSON.stringify(JSON.parse($("rText").value));
+  return recipeStr;
 }
 
 // ---------- вкладки ----------
@@ -253,7 +271,7 @@ function tick() {
   if (!$("auto").checked || busy || !video.videoWidth) return;
   busy = true;
   try {
-    const f = grab(200);
+    const f = grab(720);  // тот же размер, что у снимков: эталон привязан к масштабу кадра
     const p = JSON.parse(web.probe(f.data, f.w, f.h, recipeJson()));
     emptyFrames = p.found ? 0 : emptyFrames + 1;
     if (emptyFrames >= 3) armed = true;
@@ -359,16 +377,14 @@ function updateGoodCount() {
 }
 $("rSave").addEventListener("click", () => {
   try {
-    const txt = JSON.stringify(JSON.parse($("rText").value), null, 2);
-    $("rText").value = txt;
-    try { localStorage.setItem(RECIPE_KEY, txt); } catch (e) { /* не критично */ }
+    setRecipe(JSON.parse($("rText").value));
     flashReport("Рецепт сохранён в этом браузере.");
   } catch (e) {
     flashReport("Ошибка в JSON: " + e.message);
   }
 });
 $("rReset").addEventListener("click", () => {
-  $("rText").value = demoRecipe;
+  setRecipe(JSON.parse(demoRecipe), false);
   try { localStorage.removeItem(RECIPE_KEY); } catch (e) { /* не критично */ }
   flashReport("Возвращён демо-рецепт.");
 });
@@ -377,13 +393,121 @@ $("rCalib").addEventListener("click", () => {
   if (raws.length < 5) return flashReport("Нужно хотя бы 5 снимков с разметкой «годная».");
   const res = JSON.parse(web.calibrate_json(JSON.stringify(raws), recipeJson()));
   if (res.error) return flashReport(res.error);
-  $("rText").value = JSON.stringify(res.recipe, null, 2);
-  try { localStorage.setItem(RECIPE_KEY, $("rText").value); } catch (e) { /* не критично */ }
+  setRecipe(res.recipe);
   flashReport(res.report + "\n\nРецепт обновлён и сохранён.");
 });
 function flashReport(text) {
   $("rReport").classList.remove("hidden");
   $("rReport").textContent = text;
 }
+
+// ---------- настройка по эталону ----------
+const su = { raw: null, img: null, bottle: null, label: null, step: "bottle", drag: null };
+const suCanvas = $("suCanvas");
+const suCtx = suCanvas.getContext("2d");
+
+function suLoad(raw) {
+  const img = new Image();
+  img.onload = () => {
+    Object.assign(su, { raw, img, bottle: null, label: null, step: "bottle" });
+    suCanvas.width = img.naturalWidth;
+    suCanvas.height = img.naturalHeight;
+    $("suNotes").classList.add("hidden");
+    $("suCheck").classList.add("hidden");
+    suStep("bottle");
+  };
+  img.src = raw;
+}
+
+function suStep(step) {
+  su.step = step;
+  $("suStepBottle").classList.toggle("on", step === "bottle");
+  $("suStepLabel").classList.toggle("on", step === "label");
+  $("suHint").textContent = !su.img ? "Сначала выберите снимок."
+    : step === "bottle" ? "Обведите бутылку целиком: от верха крышки до дна, от края до края."
+    : "Обведите этикетку по её краям (или нажмите «без этикетки»).";
+  $("suMake").disabled = !su.bottle;
+  suDraw();
+}
+
+function suDraw() {
+  if (!su.img) return;
+  suCtx.drawImage(su.img, 0, 0);
+  const lw = Math.max(2, suCanvas.width / 300);
+  for (const [r, color, name] of [[su.bottle, "#ef4444", "бутылка"], [su.label, "#3b82f6", "этикетка"]]) {
+    if (!r) continue;
+    suCtx.strokeStyle = color;
+    suCtx.lineWidth = lw;
+    suCtx.strokeRect(r[0], r[1], r[2], r[3]);
+    suCtx.fillStyle = color;
+    suCtx.font = `${Math.round(lw * 7)}px system-ui`;
+    suCtx.fillText(name, r[0], Math.max(lw * 7, r[1] - lw * 2));
+  }
+}
+
+function suPoint(e) {
+  const b = suCanvas.getBoundingClientRect();
+  return [(e.clientX - b.left) * suCanvas.width / b.width, (e.clientY - b.top) * suCanvas.height / b.height];
+}
+suCanvas.addEventListener("pointerdown", (e) => {
+  if (!su.img) return;
+  suCanvas.setPointerCapture(e.pointerId);
+  su.drag = suPoint(e);
+});
+suCanvas.addEventListener("pointermove", (e) => {
+  if (!su.drag) return;
+  const [x, y] = suPoint(e);
+  const [x0, y0] = su.drag;
+  su[su.step] = [Math.round(Math.min(x, x0)), Math.round(Math.min(y, y0)), Math.round(Math.abs(x - x0)), Math.round(Math.abs(y - y0))];
+  suDraw();
+});
+suCanvas.addEventListener("pointerup", () => {
+  if (!su.drag) return;
+  su.drag = null;
+  const r = su[su.step];
+  if (!r || r[2] < 8 || r[3] < 8) { su[su.step] = null; suDraw(); return; }
+  suStep(su.step === "bottle" ? "label" : "label");
+});
+$("suStepBottle").addEventListener("click", () => suStep("bottle"));
+$("suStepLabel").addEventListener("click", () => suStep("label"));
+$("suNoLabel").addEventListener("click", () => { su.label = null; $("suLabel").checked = false; suStep("label"); });
+
+$("suLast").addEventListener("click", () => {
+  const last = [...rows].reverse().find((r) => r.raw && !r.source.startsWith("synth"));
+  if (!last) return alert("Нет снимков: сделайте снимок во вкладке «Камера» или загрузите фото.");
+  suLoad(last.raw);
+});
+$("suUpload").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const bmp = await createImageBitmap(file);
+  grabFrom(bmp, bmp.width, bmp.height, 720);  // тот же размер, что у проверяемых кадров
+  suLoad(canvas.toDataURL("image/jpeg", 0.92));
+  e.target.value = "";
+});
+
+$("suMake").addEventListener("click", () => {
+  if (!su.bottle) return;
+  const params = {
+    bottle: su.bottle, label: $("suLabel").checked ? su.label : null,
+    diameter_mm: +$("suD").value, cap_diameter_mm: +$("suCapD").value, cap_height_mm: +$("suCapH").value,
+    sku: $("suSku").value,
+    checks: { cap: { enabled: $("suCap").checked }, label: { enabled: $("suLabel").checked }, level: { enabled: $("suLevel").checked } },
+  };
+  const res = JSON.parse(web.make_reference_json(su.raw, JSON.stringify(params)));
+  const notes = $("suNotes");
+  notes.classList.remove("hidden");
+  if (res.error) { notes.textContent = res.error; return; }
+  setRecipe(res.recipe);
+  const verdict = res.check.ok ? "Эталонный снимок проходит проверку." : "Эталонный снимок НЕ проходит: " + reasonText(res.check);
+  notes.textContent = ["Рецепт создан и сохранён.", verdict, ...res.notes,
+    "", "Дальше: в «Разметке» выберите «годная», снимите 5–20 годных бутылок (переставляя их на метку),",
+    "затем «Рецепт» → «Калибровать по годным». После этого можно снимать брак."].join("\n");
+  $("suCheck").src = res.check.image;
+  $("suCheck").classList.remove("hidden");
+});
+
+document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () =>
+  document.querySelector(`#tabs button[data-tab="${b.dataset.goto}"]`).click()));
 
 boot();

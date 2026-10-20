@@ -8,7 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from . import vision
+from . import reference, vision
 
 REASONS = {
     "no_bottle": "бутылка не найдена в кадре",
@@ -42,7 +42,14 @@ class Verdict:
         return {c.name: c.values for c in self.checks}
 
 
-def inspect(img_bgr: np.ndarray, recipe: dict) -> Verdict:
+def enabled(recipe: dict, name: str) -> bool:
+    return name in recipe and recipe[name].get("enabled", True)
+
+
+def inspect(img_bgr: np.ndarray, recipe: dict, thresholds_off: bool = False) -> Verdict:
+    """thresholds_off — только измерить (для калибровки порогов по годным)."""
+    if recipe.get("mode") == "reference":
+        return _inspect_reference(img_bgr, recipe, thresholds_off)
     lab = vision.to_lab(img_bgr)
     bg = vision.background(lab)
     geo = vision.locate(lab, bg, recipe)
@@ -50,14 +57,44 @@ def inspect(img_bgr: np.ndarray, recipe: dict) -> Verdict:
         # Датчик сработал, а бутылки нет — безопаснее сбросить.
         return Verdict(False, ["no_bottle"])
     checks = []
-    if "cap" in recipe:
+    if enabled(recipe, "cap"):
         checks.append(vision.check_cap(lab, bg, geo, recipe["cap"]))
-    if "level" in recipe:
+    if enabled(recipe, "level"):
         checks.append(vision.check_level(lab, geo, recipe["level"]))
-    if "label" in recipe:
+    if enabled(recipe, "label"):
         checks.append(vision.check_label(lab, geo, recipe["label"]))
     reasons = [r for c in checks for r in c.reasons]
     return Verdict(not reasons, reasons, checks, geo)
+
+
+def _inspect_reference(img_bgr: np.ndarray, recipe: dict, thresholds_off: bool) -> Verdict:
+    if thresholds_off:
+        recipe = {k: (dict(v) if isinstance(v, dict) else v) for k, v in recipe.items()}
+        recipe["locate"]["min_score"] = -1
+        for key in ("cap", "label"):
+            if key in recipe:
+                recipe[key]["min_ncc"] = -1
+                recipe[key]["min_texture"] = -1
+    R, rect = reference.load_ref(recipe)
+    A, score, (k, bx, by) = reference.align(img_bgr, recipe)
+    loc = vision.Check("locate", A is not None, values={"score": round(score, 2)})
+    if A is None:
+        return Verdict(False, ["no_bottle"], [loc])
+    d = recipe["bottle"]["diameter_mm"]
+    frame_geo = vision.Geometry(int(bx), int(by), int(rect[2] * k), int(rect[3] * k), rect[2] * k / d)
+    geo = reference.ref_geometry(recipe)
+    checks = [loc]
+    if enabled(recipe, "cap"):
+        checks.append(reference.check_cap(A, R, geo, recipe["cap"]))
+    if enabled(recipe, "level"):
+        checks.append(vision.check_level(vision.to_lab(A), geo, recipe["level"]))
+    if enabled(recipe, "label"):
+        checks.append(reference.check_label(A, R, geo, recipe["label"]))
+    for c in checks:
+        if c.rect:
+            c.rect = reference.to_frame(c.rect, rect, k, bx, by)
+    reasons = [r for c in checks for r in c.reasons]
+    return Verdict(not reasons, reasons, checks, frame_geo)
 
 
 def annotate(img_bgr: np.ndarray, v: Verdict) -> np.ndarray:

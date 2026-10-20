@@ -79,3 +79,12 @@ pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8p
 textarea { width: 100%; min-height: 420px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; }
 .prose { max-width: 760px; }
 .presets span { color: var(--muted); font-size: 13px; }
+
+.banner { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: var(--bad-bg); color: var(--ink); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 14px; }
+.setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .setup { grid-template-columns: 1fr; } }
+.canvasbox canvas { width: 100%; height: auto; max-height: 75vh; object-fit: contain; background: #000; border-radius: 10px; touch-action: none; cursor: crosshair; display: block; }
+.steps button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+#suCheck { max-width: 100%; max-height: 50vh; border-radius: 8px; }
+input[type=text] { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; width: 160px; }
+#suNotes { white-space: pre-wrap; }

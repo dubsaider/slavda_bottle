@@ -11,6 +11,9 @@ from . import vision
 
 
 def calibrate(images, recipe: dict) -> tuple[dict, str]:
+    if recipe.get("mode") == "reference":
+        from . import reference
+        return reference.calibrate(images, recipe)
     images = [img for _, img in images]
     # Ширина и высота силуэта (с крышкой) завышены на одну и ту же кромку e:
     # w = D*ppm + e, h = Hb*ppm + e  ->  ppm = (h - w) / (Hb - D).

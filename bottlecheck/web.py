@@ -12,7 +12,7 @@ from dataclasses import asdict
 import cv2
 import numpy as np
 
-from . import synth, vision
+from . import reference, synth, vision
 from .calibrate import calibrate
 from .evaluate import evaluate_rows
 from .inspection import REASONS, annotate, inspect
@@ -53,8 +53,20 @@ def inspect_frame(rgba, w: int, h: int, recipe_json: str) -> str:
 
 def probe(rgba, w: int, h: int, recipe_json: str) -> str:
     """Виртуальный фотодатчик: есть ли бутылка и стоит ли она по центру кадра."""
+    recipe = json.loads(recipe_json)
+    if recipe.get("mode") == "reference":
+        img = _from_rgba(rgba, w, h)
+        R, rect = reference.load_ref(recipe)
+        base = 1.0 / recipe["reference"].get("scale", 1.0)
+        lo, hi = recipe["locate"].get("scale_range", [0.8, 1.25])
+        mask = reference.anchor_mask(recipe, R.shape, rect)
+        score, k, bx, _ = reference._coarse(img, R, rect, mask, base * np.geomspace(lo, hi, 6))
+        found = bool(score >= recipe["locate"].get("min_score", 0.3))
+        cx = bx + rect[2] * k / 2
+        return json.dumps({"found": found, "centered": bool(found and abs(cx - w / 2) < 0.1 * w),
+                           "score": round(score, 2)})
     lab = vision.to_lab(_from_rgba(rgba, w, h))
-    geo = vision.locate(lab, vision.background(lab), json.loads(recipe_json))
+    geo = vision.locate(lab, vision.background(lab), recipe)
     centered = geo is not None and abs(geo.cx - w / 2) < 0.1 * w
     return json.dumps({"found": geo is not None, "centered": centered})
 
@@ -89,3 +101,22 @@ def evaluate_json(rows_json: str) -> str:
 def simulate_json(rejects_json: str, params_json: str) -> str:
     res = simulate(json.loads(rejects_json), **json.loads(params_json))
     return json.dumps({"report": res.report(), **asdict(res)}, ensure_ascii=False)
+
+
+def make_reference_json(raw_url: str, params_json: str) -> str:
+    """Рецепт «по эталону» из снимка годной бутылки и рамок, нарисованных пользователем."""
+    p = json.loads(params_json)
+    img = _from_url(raw_url)
+    try:
+        recipe, notes = reference.make_recipe(
+            img, p["bottle"], float(p["diameter_mm"]), p.get("label"),
+            cap_diameter_mm=float(p.get("cap_diameter_mm", 30)),
+            cap_height_mm=float(p.get("cap_height_mm", 18)),
+            sku=p.get("sku") or "my-sku", base=p.get("checks"))
+    except Exception as e:  # кривые рамки и т.п. — показать пользователю, а не упасть
+        return json.dumps({"error": f"не получилось: {e}"}, ensure_ascii=False)
+    check = _result(img, recipe)
+    if not check["ok"]:
+        notes.append("эталонный снимок сам не проходит проверку: " + ", ".join(
+            REASONS.get(r, r) for r in check["reasons"]) + " — проверьте рамки")
+    return json.dumps({"recipe": recipe, "notes": notes, "check": check}, ensure_ascii=False)

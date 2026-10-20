@@ -28,6 +28,16 @@ def main(argv=None) -> int:
     p.add_argument("--images", required=True, help="папка только с годными бутылками")
     p.add_argument("--out", help="куда записать рецепт (по умолчанию — показать отчёт)")
 
+    p = sub.add_parser("setup", help="рецепт «по эталону» из снимка годной бутылки")
+    p.add_argument("--image", required=True)
+    p.add_argument("--bottle", required=True, help="рамка бутылки x,y,w,h (от верха крышки до дна)")
+    p.add_argument("--label", help="рамка этикетки x,y,w,h")
+    p.add_argument("--diameter", type=float, required=True, help="диаметр бутылки, мм")
+    p.add_argument("--cap-diameter", type=float, default=30)
+    p.add_argument("--cap-height", type=float, default=18)
+    p.add_argument("--sku", default="my-sku")
+    p.add_argument("--out", required=True)
+
     p = sub.add_parser("run", help="инспекция потока снимков")
     p.add_argument("--recipe", required=True)
     p.add_argument("--source", required=True, help="папка со снимками или cam:0")
@@ -70,6 +80,17 @@ def main(argv=None) -> int:
         if a.out:
             save_recipe(new, a.out)
             print(f"рецепт -> {a.out}")
+    elif a.cmd == "setup":
+        import cv2
+        from .reference import make_recipe
+        box = lambda t: tuple(int(v) for v in t.split(","))
+        img = cv2.imread(a.image)
+        if img is None:
+            raise SystemExit(f"не читается {a.image}")
+        recipe, notes = make_recipe(img, box(a.bottle), a.diameter, box(a.label) if a.label else None,
+                                    cap_diameter_mm=a.cap_diameter, cap_height_mm=a.cap_height, sku=a.sku)
+        save_recipe(recipe, a.out)
+        print("\n".join(notes) or "ок", f"\nрецепт -> {a.out}")
     elif a.cmd == "run":
         recipe = load_recipe(a.recipe)
         src = a.source
