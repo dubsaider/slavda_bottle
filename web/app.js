@@ -6,7 +6,7 @@ const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 const pyodideParam = new URLSearchParams(location.search).get("pyodide");
 const PYODIDE_URL = pyodideParam && /^\/?[\w\-\/.]+\/$/.test(pyodideParam) && !pyodideParam.includes("..") && !pyodideParam.startsWith("//")
   ? pyodideParam : PYODIDE_CDN;
-const MODULES = ["__init__", "vision", "inspection", "calibrate", "tracking", "evaluate", "synth", "reference", "web"];
+const MODULES = ["__init__", "vision", "inspection", "calibrate", "tracking", "evaluate", "synth", "reference", "simulator", "web"];
 const RECIPE_KEY = "bottlecheck.recipe";
 const MAX_ROWS = 2000;
 
@@ -102,6 +102,7 @@ document.querySelectorAll("#tabs button").forEach((b) =>
     if (b.dataset.tab === "journal") renderJournal();
     if (b.dataset.tab === "metrics") renderMetrics();
     if (b.dataset.tab === "recipe") updateGoodCount();
+    if (b.dataset.tab === "sim") { simRefresh(); simDraw(); }
   })
 );
 
@@ -371,6 +372,334 @@ function runConveyor() {
     (travel >= params.distance_mm ? " — решение опаздывает, сбрасыватель нужно отодвинуть" : "");
 }
 $("cRun").addEventListener("click", runConveyor);
+
+// ---------- симулятор: виртуальный конвейер по эталону ----------
+// Кадры готовятся заранее (Pyodide работает в основном потоке и подвесил бы анимацию),
+// дальше лента, очередь решений и сбрасыватель считаются здесь, на тех же кадрах.
+const SIM_OUT = {
+  caught: "брак сброшен", missed: "брак пропущен камерой", lost: "брак не сброшен: решение не доехало",
+  false_cam: "годная сброшена: камера ошиблась", false_track: "годная сброшена: не та бутылка", good: "годная прошла",
+};
+const sim = { frames: [], info: null, world: null, playing: false, last: 0 };
+
+class SimTracker {  // то же, что tracking.RejectTracker
+  constructor(distance, window, shadow) {
+    Object.assign(this, { distance, window, shadow, queue: [], alarms: {} });
+  }
+  alarm(kind) { this.alarms[kind] = (this.alarms[kind] || 0) + 1; }
+  inspected(id, camS, reject) { this.queue.push({ id, expected: camS + this.distance, reject }); }
+  expire(S) {
+    while (this.queue.length && this.queue[0].expected + this.window < S) { this.queue.shift(); this.alarm("lost_bottle"); }
+  }
+  atEjector(S) {
+    this.expire(S);
+    if (!this.queue.length || Math.abs(this.queue[0].expected - S) > this.window) {
+      this.alarm("unknown_bottle");
+      return { id: null, fire: !this.shadow, reason: "unknown_bottle" };
+    }
+    const it = this.queue.shift();
+    if (this.shadow) return { id: it.id, fire: false, reason: "shadow" };
+    return { id: it.id, fire: it.reject, reason: it.reject ? "reject" : "pass" };
+  }
+}
+
+function simRefresh() {
+  if (!web) return;
+  sim.info = JSON.parse(web.sim_info(recipeJson()));
+  const r = JSON.parse(recipeStr);
+  $("simRecipe").textContent = `Эталон: ${r.sku || "—"} · ` + (sim.info.reference
+    ? `по снимку, ⌀${sim.info.diameter_mm} мм, высота ${sim.info.height_mm} мм`
+    : "демо-рецепт: синтетическая бутылка вместо снимка");
+  const prev = new Set([...document.querySelectorAll("#simDefects input:checked")].map((x) => x.value));
+  const had = document.querySelectorAll("#simDefects input").length;
+  $("simDefects").innerHTML = '<span class="hint">Виды брака:</span>' + sim.info.defects.map((d) =>
+    `<label class="check"><input type="checkbox" value="${d}" ${!had || prev.has(d) ? "checked" : ""}> ${esc(TRUTH_LABELS[d] || d)}</label>`).join("");
+  const off = ["level_low", "no_cap", "no_label"].filter((d) => !sim.info.defects.includes(d));
+  $("simNote").textContent = off.includes("level_low") && sim.info.reference
+    ? "Уровень в рецепте выключен, поэтому недолив и перелив не рисуются и не проверяются." : "";
+}
+
+$("simWater").addEventListener("click", async () => {
+  const cur = JSON.parse(recipeStr);
+  if (cur.mode === "reference" && cur.sku !== "вода 1,5 л" &&
+      !confirm("Заменить текущий рецепт эталоном «вода 1,5 л»? Свой рецепт можно заранее скопировать во вкладке «Рецепт».")) return;
+  const res = await fetch("recipes/water_15.json", { cache: "no-cache" });
+  if (!res.ok) return alert("не загрузился recipes/water_15.json");
+  setRecipe(await res.json());
+  simRefresh();
+});
+
+function simParams() {
+  const g = $("simGap").value.split(/[–—-]/).map(Number).filter((v) => v > 0);
+  const d = sim.info ? sim.info.diameter_mm : 65;
+  const lo = Math.max(d + 5, g[0] || 150), hi = Math.max(lo, g[1] || g[0] || 150);
+  return {
+    speed: Math.max(1, +$("simSpeed").value), gap: [lo, hi], dist: Math.max(50, +$("simDist").value),
+    win: +$("simWin").value, lat: +$("simLat").value / 1000, slip: +$("simSlip").value, shadow: $("shadow").checked,
+  };
+}
+
+$("simPrep").addEventListener("click", async () => {
+  simRefresh();
+  const defects = [...document.querySelectorAll("#simDefects input:checked")].map((x) => x.value);
+  const n = Math.max(1, Math.min(500, +$("simN").value));
+  const params = {
+    seed: +$("simSeed").value, defect_rate: +$("simRate").value, defects, severity: $("simSev").value,
+    jitter: +$("simJit").value, exposure_ms: +$("simExp").value, speed_mm_s: simParams().speed,
+  };
+  simStop();
+  sim.frames = [];
+  const bar = $("simProgress");
+  bar.classList.remove("hidden");
+  $("simPrep").disabled = $("simPlay").disabled = $("simRestart").disabled = true;
+  const t0 = performance.now();
+  try {
+    for (let i = 0; i < n; i++) {
+      const [r] = JSON.parse(web.sim_batch(i, 1, JSON.stringify(params), recipeJson()));
+      r.img = new Image();
+      r.img.src = r.thumb;
+      sim.frames.push(r);
+      if ($("simJournal").checked) addRow(r, r.source, r.truth, null);
+      bar.firstElementChild.style.width = (100 * (i + 1) / n) + "%";
+      await new Promise((res) => setTimeout(res, 0));
+    }
+  } catch (e) {
+    console.error(e);
+    alert("Ошибка: " + e.message);
+  } finally {
+    $("simPrep").disabled = false;
+    setTimeout(() => bar.classList.add("hidden"), 600);
+  }
+  const ms = (performance.now() - t0) / Math.max(1, sim.frames.length);
+  const blur = params.exposure_ms / 1000 * params.speed_mm_s;
+  $("simPrepInfo").textContent = `Готово ${sim.frames.length} кадров, ${ms.toFixed(0)} мс на кадр в браузере. ` +
+    `Смаз за выдержку: ${blur.toFixed(1)} мм при ${params.speed_mm_s} мм/с` +
+    (blur > 2 ? " — заметный, нужна короткая выдержка или импульсная подсветка." : ".");
+  $("simPlay").disabled = $("simRestart").disabled = !sim.frames.length;
+  simReset();
+});
+
+function simReset() {
+  const p = simParams();
+  sim.world = {
+    p, t: 0, S: 0, next: 0, nextS: 0, bottles: [], pending: [], flash: null,
+    tracker: new SimTracker(p.dist, p.win, p.shadow), out: {}, byClass: {}, errors: [], bin: 0, done: false,
+  };
+  $("simErrors").innerHTML = '<p class="hint">Пока ошибок нет.</p>';
+  $("simLast").className = "last empty";
+  $("simLast").textContent = "Кадры готовы, нажмите «Пуск».";
+  simStats();
+  simDraw();
+}
+
+function simStop() {
+  sim.playing = false;
+  $("simPlay").textContent = "▶ Пуск";
+}
+
+$("simPlay").addEventListener("click", () => {
+  if (!sim.world || sim.world.done) simReset();
+  sim.playing = !sim.playing;
+  $("simPlay").textContent = sim.playing ? "⏸ Пауза" : "▶ Пуск";
+  sim.last = performance.now();
+  if (sim.playing) requestAnimationFrame(simLoop);
+});
+$("simRestart").addEventListener("click", () => { simStop(); simReset(); });
+
+const SIM_BEFORE = 350, SIM_AFTER = 350;  // мм ленты до камеры и после сбрасывателя
+
+function simLoop(now) {
+  if (!sim.playing) return;
+  const dt = Math.min(0.1, (now - sim.last) / 1000) * +$("simRate2").value;
+  sim.last = now;
+  const steps = Math.ceil(dt / 0.002);
+  for (let i = 0; i < steps && !sim.world.done; i++) simStep(dt / steps);
+  simDraw();
+  if (sim.world.done) {
+    simStop();
+    simStats();
+    return;
+  }
+  requestAnimationFrame(simLoop);
+}
+
+function simBaseX(w, b) { return -SIM_BEFORE + (w.S - b.spawnS); }
+function simX(w, b) {  // проскальзывание набегает между камерой и сбрасывателем
+  const x = simBaseX(w, b);
+  return x + b.slip * Math.min(1, Math.max(0, x / w.p.dist));
+}
+
+function simStep(dt) {
+  const w = sim.world, p = w.p;
+  if (w.next < sim.frames.length && w.S >= w.nextS) {
+    w.bottles.push({ i: w.next, f: sim.frames[w.next], spawnS: w.S, slip: gauss() * p.slip, cam: false, ej: false, drop: 0 });
+    w.next++;
+    w.nextS = w.S + p.gap[0] + Math.random() * (p.gap[1] - p.gap[0]);
+  }
+  const before = w.bottles.map((b) => simX(w, b));
+  w.t += dt;
+  w.S += p.speed * dt;
+  w.pending = w.pending.filter((v) => {
+    if (v.at > w.t) return true;
+    w.tracker.inspected(v.id, v.camS, v.reject);
+    return false;
+  });
+  w.bottles.forEach((b, k) => {
+    const x = simX(w, b);
+    if (!b.cam && x >= 0) {
+      b.cam = true;
+      const camS = w.S - (x - 0);  // энкодер в момент съёмки
+      w.pending.push({ at: w.t + p.lat, id: b.i, camS, reject: !b.f.ok });
+      w.flash = { t: w.t, ok: b.f.ok };
+      simShowLast(b.f);
+    }
+    if (b.cam && !b.ej && x >= p.dist && before[k] < p.dist + 1e-9) {
+      b.ej = true;
+      b.decision = w.tracker.atEjector(w.S - (x - p.dist));
+      simOutcome(b);
+    }
+    if (b.decision && b.decision.fire) b.drop += dt;
+  });
+  w.bottles = w.bottles.filter((b) => {
+    const gone = b.drop > 0.6 || simX(w, b) > p.dist + SIM_AFTER + 100;
+    if (gone && b.decision && b.decision.fire) w.bin++;
+    return !gone;
+  });
+  if (w.next >= sim.frames.length && !w.bottles.length) {
+    w.tracker.expire(Infinity);
+    w.done = true;
+  }
+}
+
+function gauss() {
+  return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
+}
+
+function simOutcome(b) {
+  const w = sim.world, f = b.f, fire = b.decision.fire, bad = f.truth !== "ok";
+  const kind = bad ? (fire ? "caught" : f.ok ? "missed" : "lost") : !fire ? "good" : f.ok ? "false_track" : "false_cam";
+  b.kind = kind;
+  w.out[kind] = (w.out[kind] || 0) + 1;
+  const c = (w.byClass[f.truth] = w.byClass[f.truth] || { n: 0, cam: 0, fired: 0 });
+  c.n++;
+  c.cam += !f.ok;
+  c.fired += fire;
+  if (!["caught", "good"].includes(kind)) {
+    w.errors.unshift({ f, kind, reason: b.decision.reason });
+    $("simErrors").innerHTML = w.errors.slice(0, 24).map((e) => `<div class="card reject">
+      <img src="${e.f.image}" alt="">
+      <div class="meta"><b>${esc(SIM_OUT[e.kind])}</b><br>
+        <span class="hint">на самом деле: ${esc(TRUTH_LABELS[e.f.truth] || e.f.truth)}</span><br>
+        <span class="why">камера: ${esc(reasonText(e.f))}</span>
+        ${e.reason === "unknown_bottle" ? '<br><span class="hint">датчик у сбрасывателя увидел бутылку, которой нет в очереди</span>' : ""}
+        <details><summary>замеры</summary><code>${esc(JSON.stringify(e.f.measurements, null, 1))}</code></details></div></div>`).join("");
+  }
+  simStats();
+}
+
+function simShowLast(f) {
+  const el = $("simLast");
+  el.className = "last";
+  el.innerHTML = `<div class="verdict ${f.ok ? "ok" : "bad"}">${f.ok ? "ГОДНО" : "БРАК"}</div>
+    <div>${esc(reasonText(f))} <span class="hint">· на самом деле: ${esc(TRUTH_LABELS[f.truth] || f.truth)}</span></div>
+    <img src="${f.image}" alt="">`;
+}
+
+function simStats() {
+  const w = sim.world;
+  if (!w) return;
+  const o = w.out, done = Object.values(o).reduce((a, b) => a + b, 0);
+  const alarms = Object.entries(w.tracker.alarms).map(([k, v]) =>
+    `${k === "lost_bottle" ? "решение без бутылки" : "бутылка без решения"}: ${v}`).join(", ");
+  $("simStats").innerHTML = stat(`${done} / ${sim.frames.length}`, "прошло сбрасыватель") +
+    Object.entries(SIM_OUT).map(([k, v]) => `<div class="stat ${["caught", "good"].includes(k) ? "" : (o[k] ? "warn" : "")}"><b>${o[k] || 0}</b>${esc(v)}</div>`).join("") +
+    stat(alarms || "нет", "тревоги трекинга");
+  const rows = Object.entries(w.byClass).sort((a, b) => (a[0] === "ok" ? -1 : b[0] === "ok" ? 1 : a[0].localeCompare(b[0])));
+  $("simTable").innerHTML = rows.length ? "<tr><th>Класс</th><th>Бутылок</th><th>Камера: брак</th><th>Сброшено</th></tr>" +
+    rows.map(([k, c]) => `<tr class="${(k === "ok" ? c.fired : c.n - c.fired) ? "bad" : ""}"><td>${esc(TRUTH_LABELS[k] || k)}</td><td>${c.n}</td><td>${c.cam}</td><td>${c.fired}</td></tr>`).join("")
+    : "";
+}
+
+function simDraw() {
+  const cv = $("simCanvas"), w = sim.world;
+  if (!w || !cv.offsetParent) return;
+  const css = getComputedStyle(document.documentElement);
+  const col = (n) => css.getPropertyValue(n).trim();
+  const p = w.p, info = sim.info || { diameter_mm: 65, height_mm: 205 };
+  const cssW = cv.clientWidth, dpr = window.devicePixelRatio || 1;
+  const x0 = -SIM_BEFORE, range = p.dist + SIM_BEFORE + SIM_AFTER;
+  const k = cssW / range;
+  // бутылки рисуются не выше 170 px: на широком экране в масштабе ленты они огромные
+  const bs = Math.min(1, 170 / (info.height_mm * k));
+  const bh = info.height_mm * k * bs, top = 34, beltY = top + bh, cssH = Math.round(beltY + 90);
+  if (cv.width !== Math.round(cssW * dpr) || cv.height !== Math.round(cssH * dpr)) {
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssH * dpr);
+    cv.style.height = cssH + "px";
+  }
+  const g = cv.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, cssW, cssH);
+  const X = (mm) => (mm - x0) * k;
+  g.font = "12px system-ui";
+  // лента с бегущей разметкой
+  g.fillStyle = col("--line");
+  g.fillRect(0, beltY, cssW, 10);
+  g.fillStyle = col("--muted");
+  for (let m = -((w.S % 50) + 50); m < range + 50; m += 50) g.fillRect(m * k, beltY + 4, 2, 2);
+  // камера
+  const fl = w.flash && w.t - w.flash.t < 0.25 ? w.flash : null;
+  if (fl) {
+    g.fillStyle = fl.ok ? "rgba(22,163,74,.25)" : "rgba(220,38,38,.3)";
+    g.fillRect(X(0) - 0.8 * bh * 0.3, top, 1.6 * bh * 0.3, bh);
+  }
+  g.strokeStyle = col("--accent");
+  g.setLineDash([4, 4]);
+  g.beginPath(); g.moveTo(X(0), 14); g.lineTo(X(0), beltY); g.stroke();
+  g.setLineDash([]);
+  g.fillStyle = col("--accent");
+  g.fillText("камера", X(0) - 20, 12);
+  // окно совпадения и сбрасыватель
+  g.fillStyle = "rgba(127,127,127,.15)";
+  g.fillRect(X(p.dist - p.win), top, 2 * p.win * k, bh);
+  g.fillStyle = col("--bad");
+  g.fillText("сбрасыватель", X(p.dist) - 36, 12);
+  g.fillRect(X(p.dist) - 1, 16, 2, beltY - 16);
+  // очередь решений: где по энкодеру должна быть каждая бутылка из очереди
+  for (const q of w.tracker.queue) {
+    const xq = p.dist - (q.expected - w.S);
+    g.fillStyle = q.reject ? col("--bad") : col("--ok");
+    g.beginPath(); g.moveTo(X(xq), beltY + 12); g.lineTo(X(xq) - 5, beltY + 20); g.lineTo(X(xq) + 5, beltY + 20); g.fill();
+  }
+  // бункер
+  const binX = X(p.dist + info.diameter_mm * 0.2), binW = Math.max(40, info.diameter_mm * 2 * k);
+  g.strokeStyle = col("--bad");
+  g.strokeRect(binX, beltY + 34, binW, 40);
+  g.fillStyle = col("--bad");
+  g.fillText(`брак: ${w.bin}`, binX + 4, beltY + 58);
+  // бутылки
+  for (const b of w.bottles) {
+    const x = simX(w, b), img = b.f.img;
+    const h = bh, iw = img.naturalWidth ? h * img.naturalWidth / img.naturalHeight : info.diameter_mm * k * bs;
+    const drop = b.drop > 0 ? Math.min(1, b.drop / 0.5) : 0;
+    g.save();
+    g.globalAlpha = 1 - 0.6 * drop;
+    g.translate(X(x) + drop * 30, beltY - h / 2 + drop * (h * 0.6 + 40));
+    g.rotate(drop * 1.2);
+    if (img.complete && img.naturalWidth) g.drawImage(img, -iw / 2, -h / 2, iw, h);
+    else { g.fillStyle = col("--muted"); g.fillRect(-iw / 2, -h / 2, iw, h); }
+    g.restore();
+    if (b.cam && !drop) {
+      g.fillStyle = b.f.ok ? col("--ok") : col("--bad");
+      g.beginPath(); g.arc(X(x), top - 8, 5, 0, 2 * Math.PI); g.fill();
+    }
+  }
+  if (w.done) {
+    g.fillStyle = col("--ink");
+    g.fillText("Готово. «Заново на тех же кадрах» — повторить с другими настройками ленты.", 8, cssH - 6);
+  }
+}
+window.addEventListener("resize", simDraw);
 
 // ---------- рецепт ----------
 function updateGoodCount() {

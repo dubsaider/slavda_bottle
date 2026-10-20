@@ -132,6 +132,27 @@ def measure_level(lab, geo: Geometry, c: dict) -> tuple[float | None, float, tup
     return geo.mm(y0 + 1 + i + k / 2), contrast, rect
 
 
+def level_ambiguity(lab, geo: Geometry, c: dict) -> float:
+    """Сила второй по величине границы в зоне уровня относительно первой (0..1).
+
+    Близко к 1 — в зоне несколько одинаково сильных перепадов (рельеф бутылки,
+    блики), и «уровень» будет прыгать между ними от бутылки к бутылке.
+    """
+    rect = geo.rect(c["search_from_mm"], c["search_to_mm"], c["strip_mm"])
+    x0, y0, x1, y1 = _clip(rect, lab.shape)
+    k = c.get("gradient_px", 3)
+    if y1 - y0 <= k + 3 or x1 <= x0:
+        return 1.0
+    prof = np.convolve(lab[y0:y1, x0:x1, 0].mean(axis=1), np.ones(3) / 3, mode="valid")
+    d = prof[:-k] - prof[k:]
+    i = int(np.argmax(d))
+    if d[i] <= 0:
+        return 1.0
+    sup = int(3 * geo.px_per_mm)  # соседние строки того же перепада не считаются
+    rest = np.concatenate([d[:max(0, i - sup)], d[i + sup + 1:]])
+    return float(max(0.0, rest.max()) / d[i]) if rest.size else 0.0
+
+
 def check_level(lab, geo: Geometry, c: dict) -> Check:
     level, contrast, rect = measure_level(lab, geo, c)
     chk = Check("level", True, values={"contrast": round(contrast, 1)}, rect=rect)

@@ -357,10 +357,16 @@ def make_recipe(img: np.ndarray, bottle_rect, diameter_mm: float, label_rect=Non
              "strip_mm": round(max(4.0, 0.25 * cap_diameter_mm), 1), "gradient_px": 3,
              "min_contrast": 4, "target_mm": 0, "tol_mm": 4}
     lvl, contrast, _ = vision.measure_level(vision.to_lab(R), geo, level)
+    amb = vision.level_ambiguity(vision.to_lab(R), geo, level)
     if lvl is None or level_to - level_from < 10:
         level["enabled"] = False
         notes.append("граница воды не видна (контраст %.1f) — проверка уровня выключена; "
                      "нужна подсветка сзади: экран с белой картинкой за бутылкой" % contrast)
+    elif amb > 0.6:
+        level["enabled"] = False
+        notes.append("в зоне уровня несколько похожих границ (рельеф бутылки, блики: вторая — %d%% "
+                     "от первой) — уровень прыгал бы между ними, проверка выключена; нужна подсветка "
+                     "сзади, чтобы линия воды стала самой контрастной" % round(100 * amb))
     else:
         level["target_mm"] = round(lvl, 1)
     recipe["level"] = level
