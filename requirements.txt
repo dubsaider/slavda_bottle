@@ -1,0 +1,3 @@
+numpy>=1.26
+opencv-python>=4.9   # для run --source cam:N нужен GUI; на сервере хватит opencv-python-headless
+pytest>=8

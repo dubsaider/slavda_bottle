@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Отбраковка бутылок — прототип</title>
+<meta name="description" content="Прототип видеоконтроля бутылок: проверки крышки, уровня и этикетки в браузере, режим тени, метрики приёмки, модель сбрасывателя.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect x=%225%22 y=%221%22 width=%226%22 height=%223%22 fill=%22%23b91c1c%22/%3E%3Cpath d=%22M6 4h4v3l2 2v6H4V9l2-2z%22 fill=%22%2315803d%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>Отбраковка бутылок</h1>
+    <span class="sub">прототип без оборудования · всё считается в браузере</span>
+  </div>
+  <div id="status" class="status loading">Загрузка Python и OpenCV…</div>
+</header>
+
+<nav id="tabs">
+  <button data-tab="camera" class="on">Камера</button>
+  <button data-tab="synth">Синтетика</button>
+  <button data-tab="journal">Журнал <span id="jcount" class="pill">0</span></button>
+  <button data-tab="metrics">Метрики</button>
+  <button data-tab="conveyor">Конвейер</button>
+  <button data-tab="recipe">Рецепт</button>
+  <button data-tab="help">Как снимать</button>
+</nav>
+
+<main>
+  <div class="bar">
+    <label>Разметка следующих снимков
+      <select id="truth"></select>
+    </label>
+    <label class="check"><input type="checkbox" id="shadow"> режим «тени» (не сбрасывать)</label>
+    <label class="check"><input type="checkbox" id="sound" checked> звук сброса</label>
+  </div>
+
+  <section id="camera" class="tab on">
+    <div class="cam">
+      <div class="viewport">
+        <video id="video" playsinline muted></video>
+        <div id="armed" class="armed hidden">ДАТЧИК ВЗВЕДЁН</div>
+        <div id="flash" class="flash"></div>
+      </div>
+      <div class="side">
+        <div class="row">
+          <button id="camStart" class="primary" disabled>Включить камеру</button>
+          <button id="camShot" disabled>Снимок</button>
+        </div>
+        <label class="check"><input type="checkbox" id="auto" checked> авто: снимать, когда бутылка встала по центру</label>
+        <label class="file">Или загрузить фото
+          <input type="file" id="upload" accept="image/*" multiple disabled>
+        </label>
+        <div id="last" class="last empty">Здесь будет последний результат</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="synth" class="tab">
+    <p class="lead">Синтетические бутылки 0,5 л с семью видами брака: проверка логики без камеры. Разметка ставится автоматически.</p>
+    <div class="form">
+      <label>Бутылок <input id="sN" type="number" value="300" min="10" max="2000"></label>
+      <label>Доля брака <input id="sRate" type="number" value="0.3" step="0.05" min="0" max="1"></label>
+      <label>Seed <input id="sSeed" type="number" value="7"></label>
+      <button id="sRun" class="primary" disabled>Прогнать</button>
+      <button id="sGood" disabled>60 годных для калибровки</button>
+    </div>
+    <div id="sProgress" class="progress hidden"><div></div></div>
+    <p class="hint">Порядок как в README: «60 годных» → вкладка «Рецепт» → «Калибровать» → «Прогнать» → «Метрики».</p>
+  </section>
+
+  <section id="journal" class="tab">
+    <div class="bar">
+      <label class="check"><input type="checkbox" id="jAll"> показывать годные</label>
+      <button id="jExport">Экспорт CSV</button>
+      <button id="jClear" class="danger">Очистить</button>
+    </div>
+    <div id="jStats" class="stats"></div>
+    <div id="jList" class="cards"></div>
+  </section>
+
+  <section id="metrics" class="tab">
+    <div id="mSummary" class="stats"></div>
+    <h3>Критерии приёмки из КП</h3>
+    <p class="hint">Считаются по снимкам с разметкой: синтетика или снимки, сделанные с выбранным классом в «Разметке».</p>
+    <pre id="mReport">—</pre>
+  </section>
+
+  <section id="conveyor" class="tab">
+    <p class="lead">Модель ленты: решение встаёт в очередь с позицией энкодера на момент съёмки. Датчик перед сбрасывателем сверяет, та ли бутылка приехала. Незнакомую бутылку система сбрасывает.</p>
+    <div class="form">
+      <label class="check"><input type="checkbox" id="cJournal"> решения из журнала</label>
+      <label>Бутылок <input id="cN" type="number" value="2000"></label>
+      <label>Доля брака <input id="cRate" type="number" value="0.03" step="0.01"></label>
+      <label>Камера → сбрасыватель, мм <input id="cDist" type="number" value="600"></label>
+      <label>Окно совпадения, мм <input id="cWin" type="number" value="25"></label>
+      <label>Проскальзывание СКО, мм <input id="cSlip" type="number" value="2" step="0.5"></label>
+      <label>Скорость ленты, мм/с <input id="cSpeed" type="number" value="250"></label>
+      <label>Задержка решения, мс <input id="cLat" type="number" value="150"></label>
+      <label>Снимают с ленты, вероятн. <input id="cRem" type="number" value="0" step="0.005"></label>
+      <label>Подставляют чужую, вероятн. <input id="cFor" type="number" value="0" step="0.005"></label>
+      <button id="cRun" class="primary" disabled>Симулировать</button>
+    </div>
+    <div class="row presets">
+      <span>Сценарии:</span>
+      <button data-preset="normal">норма</button>
+      <button data-preset="hands">люди трогают бутылки</button>
+      <button data-preset="late">решение опаздывает</button>
+      <button data-preset="slip">сильное проскальзывание</button>
+    </div>
+    <pre id="cReport">—</pre>
+  </section>
+
+  <section id="recipe" class="tab">
+    <p class="lead">Рецепт SKU: все зоны в мм от дна. Калибровка снимает эталоны с бутылок, размеченных как «годная».</p>
+    <div class="row">
+      <button id="rSave" class="primary">Сохранить</button>
+      <button id="rCalib" disabled>Калибровать по годным</button>
+      <button id="rReset">Вернуть демо-рецепт</button>
+      <span id="rGood" class="hint"></span>
+    </div>
+    <textarea id="rText" spellcheck="false"></textarea>
+    <pre id="rReport" class="hidden"></pre>
+  </section>
+
+  <section id="help" class="tab prose">
+    <h3>Стенд за ноль рублей</h3>
+    <ol>
+      <li><b>Камера</b> — телефон. Страница открывается по HTTPS, поэтому браузер даст доступ к задней камере.</li>
+      <li><b>Свет</b>: бутылка на фоне равномерно светлого экрана (планшет или монитор с белой картинкой на полной яркости). Он работает как задняя подсветка для уровня. Сбоку — лампа через лист бумаги.</li>
+      <li><b>Положение</b>: бутылка боком, целиком в кадре, по краям кадра виден фон. Телефон закрепить: свет и ракурс не должны меняться между снимками.</li>
+    </ol>
+    <h3>Порядок проверки</h3>
+    <ol>
+      <li>Во вкладке «Рецепт» указать диаметр и высоту своей бутылки (с крышкой), примерные зоны крышки, этикетки и уровня.</li>
+      <li>«Разметка» = «годная», снять 20–50 годных бутылок, каждую чуть повернув. «Рецепт» → «Калибровать по годным».</li>
+      <li>Сделать брак руками (открутить крышку, отлить, сдвинуть или снять этикетку) и снимать его с выбранным классом в «Разметке».</li>
+      <li>«Метрики» показывают пропуск брака и ложную отбраковку против целей КП. В «Журнале» можно отметить ложные сбросы.</li>
+      <li>Режим «тени»: система решает и пишет, но не «сбрасывает» (нет звука и красной вспышки). Так можно сравнить с ручной отбраковкой.</li>
+    </ol>
+    <p>Журнал хранится только в этой вкладке браузера. Перед закрытием выгрузите CSV.</p>
+    <p>Тот же код работает из командной строки, см. <a href="https://github.com/dubsaider/slavda_bottle">README репозитория</a>.</p>
+  </section>
+</main>
+
+<canvas id="grab" hidden></canvas>
+<script src="app.js"></script>
+</body>
+</html>
