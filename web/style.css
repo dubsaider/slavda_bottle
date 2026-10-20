@@ -102,3 +102,18 @@ input#simGap { width: 130px; }
 .tbl th, .tbl td { border-bottom: 1px solid var(--line); padding: 4px 10px; text-align: right; }
 .tbl th:first-child, .tbl td:first-child { text-align: left; }
 .tbl tr.bad td { color: var(--bad); }
+
+.s3view { position: relative; margin: 8px 0 12px; }
+#s3canvas { height: 62vh; min-height: 340px; border-radius: 10px; overflow: hidden; background: #2b2f33; touch-action: none; }
+#s3canvas canvas { display: block; width: 100%; height: 100%; }
+.hud { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+.hud:empty { display: none; }
+.inset { position: absolute; right: 8px; bottom: 8px; width: 170px; background: rgba(0,0,0,.6); color: #fff; padding: 6px; border-radius: 8px; font-size: 12px; }
+.inset:empty { display: none; }
+.inset img { width: 100%; display: block; margin-top: 4px; border-radius: 4px; }
+.inset .verdict { font-size: 15px; }
+.inset .hint { color: #d6d3d1; }
+.small { font-size: 12px; }
+pre.small { white-space: pre-wrap; }
+#s3ref img { max-height: 360px; }
+@media (max-width: 760px) { .inset { width: 120px; } }

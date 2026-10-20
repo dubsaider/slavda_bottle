@@ -103,6 +103,7 @@ document.querySelectorAll("#tabs button").forEach((b) =>
     if (b.dataset.tab === "metrics") renderMetrics();
     if (b.dataset.tab === "recipe") updateGoodCount();
     if (b.dataset.tab === "sim") { simRefresh(); simDraw(); }
+    if (b.dataset.tab === "sim3d") loadSim3d();
   })
 );
 
@@ -700,6 +701,21 @@ function simDraw() {
   }
 }
 window.addEventListener("resize", simDraw);
+
+// ---------- 3D-линия (модуль грузится при первом открытии вкладки) ----------
+const VER = new URL(document.currentScript.src).searchParams.get("v") || "";
+let sim3d = null;
+async function loadSim3d() {
+  if (sim3d) return;
+  try {
+    sim3d = await import("./sim3d.js" + (VER ? "?v=" + VER : ""));
+    sim3d.mount();
+  } catch (e) {
+    console.error(e);
+    sim3d = null;
+    $("s3status").textContent = "Не загрузилась 3D-сцена: " + e.message;
+  }
+}
 
 // ---------- рецепт ----------
 function updateGoodCount() {

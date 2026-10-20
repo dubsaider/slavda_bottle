@@ -148,3 +148,8 @@ def sim_batch(start: int, count: int, params_json: str, recipe_json: str) -> str
         r.update(truth=defect, info=info, thumb=_to_url(thumb, 85), source=f"sim_{p.get('seed', 0)}_{i:05d}")
         out.append(r)
     return json.dumps(out, ensure_ascii=False)
+
+
+def inspect_url(raw_url: str, recipe_json: str) -> str:
+    """Проверка кадра, пришедшего как data-URL (кадры виртуальной камеры 3D-линии)."""
+    return json.dumps(_result(_from_url(raw_url), json.loads(recipe_json)), ensure_ascii=False)
