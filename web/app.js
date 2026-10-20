@@ -6,7 +6,7 @@ const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 const pyodideParam = new URLSearchParams(location.search).get("pyodide");
 const PYODIDE_URL = pyodideParam && /^\/?[\w\-\/.]+\/$/.test(pyodideParam) && !pyodideParam.includes("..") && !pyodideParam.startsWith("//")
   ? pyodideParam : PYODIDE_CDN;
-const MODULES = ["__init__", "vision", "inspection", "calibrate", "tracking", "evaluate", "synth", "reference", "simulator", "web"];
+const MODULES = ["__init__", "vision", "inspection", "calibrate", "tracking", "evaluate", "synth", "reference", "simulator", "decide", "tradeoff", "web"];
 const RECIPE_KEY = "bottlecheck.recipe";
 const MAX_ROWS = 2000;
 
@@ -104,6 +104,13 @@ document.querySelectorAll("#tabs button").forEach((b) =>
     if (b.dataset.tab === "recipe") updateGoodCount();
     if (b.dataset.tab === "sim") { simRefresh(); simDraw(); }
     if (b.dataset.tab === "sim3d") loadSim3d();
+    if (b.dataset.tab === "calc") {
+      try {
+        const r = JSON.parse(recipeStr);
+        if (r.mode === "reference" && r.bottle) { $("kD").value = r.bottle.diameter_mm; $("kH").value = r.bottle.height_mm; }
+      } catch (e) { /* демо-рецепт без размеров */ }
+      calcStation();
+    }
   })
 );
 
@@ -701,6 +708,76 @@ function simDraw() {
   }
 }
 window.addEventListener("resize", simDraw);
+
+// ---------- расчёт станции контроля ----------
+const SENSORS = [
+  { name: "1,6 Мп 1440×1080, 3,45 мкм", w: 1440, h: 1080, um: 3.45, fps: 220 },
+  { name: "2,3 Мп 1920×1200, 5,86 мкм", w: 1920, h: 1200, um: 5.86, fps: 160 },
+  { name: "5 Мп 2448×2048, 3,45 мкм", w: 2448, h: 2048, um: 3.45, fps: 75 },
+];
+const LENSES = [6, 8, 12, 16, 25, 35, 50];
+SENSORS.forEach((x, i) => $("kSensor").insertAdjacentHTML("beforeend", `<option value="${i}" ${i === 0 ? "selected" : ""}>${x.name}</option>`));
+
+function calcStation() {
+  const v = (id) => +$(id).value;
+  const rate = v("kRate"), pitch = Math.max(v("kPitch"), v("kD") + 1), D = v("kD"), H = v("kH");
+  const sen = SENSORS[v("kSensor")], cams = Math.max(1, v("kCams"));
+  const speed = rate / 3600 * pitch;                  // мм/с
+  const takt = 3600 / rate * 1000;                     // мс на бутылку
+  // Камера стоит «портретом»: длинная сторона сенсора вдоль высоты бутылки.
+  const sensL = sen.w * sen.um / 1000, fovNeed = H * 1.25;
+  const fCalc = v("kWD") * sensL / fovNeed;
+  const lens = [...LENSES].reverse().find((f) => f <= fCalc) || LENSES[0];
+  const fovH = v("kWD") * sensL / lens, fovW = fovH * sen.h / sen.w;
+  const ppm = sen.w / fovH, ppmNeed = 2 / v("kAcc");
+  const expUs = v("kBlur") / (ppm * speed) * 1e6;
+  const procMs = v("kProc") * cams, load = procMs / takt;
+  const stroke = D + 20, pushMs = v("kValve") + stroke / v("kRod");
+  const cycleMs = v("kValve") + 2 * stroke / v("kRod");
+  const clear = pitch - D;
+  const movePush = speed * pushMs / 1000, moveCycle = speed * cycleMs / 1000;
+  const decideMs = procMs + v("kValve") + 30;
+  const distMin = speed * decideMs / 1000 + D / 2;
+  const dist = Math.ceil(Math.max(300, distMin * 1.5) / 50) * 50;
+  const win = Math.max(10, 3 * v("kSlip") * Math.sqrt(dist / 600) + 5);
+  const ok = (cond) => (cond ? "✓" : "⚠");
+  const rows = [
+    ["Скорость ленты", `${speed.toFixed(0)} мм/с (${(speed * 0.06).toFixed(1)} м/мин)`, ""],
+    ["Такт: время на одну бутылку", `${takt.toFixed(0)} мс`, ""],
+    ["Объектив", `f = ${lens} мм (расчёт ${fCalc.toFixed(1)} мм)`, ok(fCalc >= LENSES[0]),
+      fCalc < LENSES[0] ? "рабочее расстояние мало — отодвиньте камеру" : ""],
+    ["Поле зрения", `${fovH.toFixed(0)} × ${fovW.toFixed(0)} мм`, ok(fovW >= D * 1.4),
+      fovW < D * 1.4 ? "узко: бутылка со смещением выйдет из кадра" : "бутылка с запасом по краям"],
+    ["Разрешение на объекте", `${ppm.toFixed(1)} px/мм (нужно ≥ ${ppmNeed.toFixed(1)})`, ok(ppm >= ppmNeed),
+      ppm < ppmNeed ? "не хватает: сенсор крупнее или точность грубее" : ""],
+    ["Выдержка без смаза", expUs >= 1000 ? `до ${(expUs / 1000).toFixed(1)} мс` : `до ${expUs.toFixed(0)} мкс`, ok(expUs >= 50),
+      expUs < 50 ? "нужна импульсная LED-подсветка (строб)" : expUs < 500 ? "короткая выдержка: яркий постоянный свет или строб" : "хватит обычного света"],
+    ["Кадров в секунду на камеру", `${(rate / 3600).toFixed(1)} (сенсор до ${sen.fps})`, ok(rate / 3600 < sen.fps), ""],
+    ["Вычислитель", `${procMs.toFixed(0)} мс на бутылку из ${takt.toFixed(0)} мс такта (${(load * 100).toFixed(0)}%)`, ok(load < 0.7),
+      load >= 0.7 ? "не успевает: быстрее проверка, параллельная обработка камер или второй вычислитель" : ""],
+    ["Толкатель: ход и время удара", `${stroke} мм, ${pushMs.toFixed(0)} мс — бутылка проходит ${movePush.toFixed(0)} мм`, ok(movePush < D * 0.5),
+      movePush >= D * 0.5 ? "бутылка уезжает во время удара: шире пластина или быстрее шток" : `пластина толкателя ≥ ${(D * 0.6 + movePush).toFixed(0)} мм`],
+    ["Два брака подряд", `цикл ${cycleMs.toFixed(0)} мс, лента проходит ${moveCycle.toFixed(0)} мм при зазоре ${clear.toFixed(0)} мм`, ok(moveCycle <= clear),
+      moveCycle > clear ? "толкатель не успеет вернуться: соседняя бутылка будет задета или пропущена" : ""],
+    ["Камера → сбрасыватель", `не меньше ${distMin.toFixed(0)} мм, рекомендуется ${dist} мм`, "✓",
+      `решение готово через ${decideMs.toFixed(0)} мс (проверка + клапан + запас 30 мс)`],
+    ["Окно совпадения датчика", `±${win.toFixed(0)} мм (шаг ${pitch} мм)`, ok(win < pitch / 2),
+      win >= pitch / 2 ? "окно больше половины шага: датчик спутает соседние бутылки" : ""],
+  ];
+  $("kOut").innerHTML = "<tr><th>Что</th><th>Значение</th><th></th><th>Комментарий</th></tr>" + rows.map(([a, b, c, d]) =>
+    `<tr class="${c === "⚠" ? "bad" : ""}"><td>${a}</td><td>${b}</td><td>${c}</td><td class="hint">${d || ""}</td></tr>`).join("");
+  return { speed, pitch, dist, cams };
+}
+document.querySelectorAll("#calc input, #calc select").forEach((x) => x.addEventListener("input", calcStation));
+$("kTo3d").addEventListener("click", () => {
+  const r = calcStation();
+  $("s3speed").value = Math.round(r.speed);
+  $("s3gap").value = `${Math.round(r.pitch * 0.95)}–${Math.round(r.pitch * 1.05)}`;
+  $("s3dist").value = r.dist;
+  $("s3cams").value = String(Math.min(4, r.cams));
+  document.querySelector('#tabs button[data-tab="sim3d"]').click();
+});
+calcStation();
 
 // ---------- 3D-линия (модуль грузится при первом открытии вкладки) ----------
 const VER = new URL(document.currentScript.src).searchParams.get("v") || "";

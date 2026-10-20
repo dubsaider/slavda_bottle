@@ -117,3 +117,12 @@ input#simGap { width: 130px; }
 pre.small { white-space: pre-wrap; }
 #s3ref img { max-height: 360px; }
 @media (max-width: 760px) { .inset { width: 120px; } }
+.tbl.map td.mcell { text-align: center; font-size: 12px; line-height: 1.3; }
+.tbl.map th { text-align: center; }
+.mcell.good { background: var(--ok-bg); }
+.mcell.warn { background: color-mix(in srgb, var(--bad-bg) 50%, var(--panel)); }
+.mcell.bad { background: var(--bad-bg); color: var(--bad); }
+.tbl tr.best td { color: var(--ok); font-weight: 600; }
+canvas.plot { width: 100%; max-width: 640px; display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
+.tbl.calc td, .tbl.calc th { text-align: left; vertical-align: top; }
+.tbl.calc td:nth-child(3) { text-align: center; }
