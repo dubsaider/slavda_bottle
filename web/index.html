@@ -20,32 +20,28 @@
     <h1>Отбраковка бутылок</h1>
     <span class="sub">прототип без оборудования · всё считается в браузере</span>
   </div>
-  <div id="status" class="status loading">Загрузка Python и OpenCV…</div>
+  <div class="hstate">
+    <label class="check" title="Система решает и пишет в журнал, но не сбрасывает — для камеры, конвейера и симуляторов"><input type="checkbox" id="shadow"> режим «тени»</label>
+    <div id="status" class="status loading">Загрузка Python и OpenCV…</div>
+  </div>
 </header>
 
 <nav id="tabs">
   <button data-tab="camera" class="on">Камера</button>
   <button data-tab="setup">Настройка</button>
-  <button data-tab="synth">Синтетика</button>
   <button data-tab="journal">Журнал <span id="jcount" class="pill">0</span></button>
   <button data-tab="metrics">Метрики</button>
-  <button data-tab="conveyor">Конвейер</button>
-  <button data-tab="sim">Симулятор</button>
   <button data-tab="sim3d">3D-линия</button>
   <button data-tab="calc">Расчёт</button>
-  <button data-tab="recipe">Рецепт</button>
-  <button data-tab="help">Как снимать</button>
+  <button data-tab="recipe" class="more">Рецепт</button>
+  <button data-tab="sim" class="more">2D-симулятор</button>
+  <button data-tab="conveyor" class="more">Конвейер</button>
+  <button data-tab="synth" class="more">Синтетика</button>
+  <button data-tab="help" class="more">Как снимать</button>
+  <button id="tabsMore" class="moreToggle" aria-expanded="false">Ещё ▾</button>
 </nav>
 
 <main>
-  <div class="bar">
-    <label>Разметка следующих снимков
-      <select id="truth"></select>
-    </label>
-    <label class="check"><input type="checkbox" id="shadow"> режим «тени» (не сбрасывать)</label>
-    <label class="check"><input type="checkbox" id="sound" checked> звук сброса</label>
-  </div>
-
   <section id="camera" class="tab on">
     <div id="demoBanner" class="banner hidden">
       Сейчас включён демо-рецепт для синтетической бутылки — настоящую бутылку он забракует.
@@ -66,13 +62,22 @@
         <label class="file">Или загрузить фото
           <input type="file" id="upload" accept="image/*" multiple disabled>
         </label>
+        <details class="more-opts">
+          <summary>Разметка и звук</summary>
+          <div class="form">
+            <label>Разметка следующих снимков <select id="truth"></select></label>
+            <label class="check"><input type="checkbox" id="sound" checked> звук сброса</label>
+          </div>
+          <p class="hint">Разметка нужна для калибровки («годная») и для метрик: снимайте брак с выбранным классом.</p>
+        </details>
         <div id="last" class="last empty">Здесь будет последний результат</div>
       </div>
     </div>
   </section>
 
   <section id="setup" class="tab">
-    <p class="lead">Эталон для своей бутылки: один снимок годной бутылки и две рамки. Бутылку система будет искать по сходству с эталоном, поэтому фон может быть любым, но камера и место бутылки между снимками не должны меняться.</p>
+    <p class="lead">Один снимок годной бутылки и две рамки — и рецепт готов.</p>
+    <details class="about"><summary>Подробнее</summary><p>Бутылку система будет искать по сходству с эталоном, поэтому фон может быть любым, но камера и место бутылки между снимками не должны меняться.</p></details>
     <div class="row">
       <button id="suLast" disabled>Взять последний снимок с камеры</button>
       <label class="file">или загрузить фото годной бутылки <input type="file" id="suUpload" accept="image/*" disabled></label>
@@ -91,16 +96,21 @@
         <div class="form">
           <label>Название <input id="suSku" type="text" value="моя бутылка"></label>
           <label>Диаметр бутылки, мм <input id="suD" type="number" value="65"></label>
-          <label>Диаметр крышки, мм <input id="suCapD" type="number" value="30"></label>
-          <label>Высота крышки, мм <input id="suCapH" type="number" value="18"></label>
         </div>
-        <p class="hint">0,5 л ≈ 65 мм, 1 л ≈ 80 мм, 1,5 л ≈ 88 мм. Точность не нужна: это только масштаб для допусков в мм.</p>
-        <div class="row">
-          <span class="hint">Проверять:</span>
-          <label class="check"><input type="checkbox" id="suCap" checked> крышку</label>
-          <label class="check"><input type="checkbox" id="suLabel" checked> этикетку</label>
-          <label class="check"><input type="checkbox" id="suLevel" checked> уровень</label>
-        </div>
+        <p class="hint">0,5 л ≈ 65 мм, 1 л ≈ 80 мм, 1,5 л ≈ 88 мм. Точность не нужна: это только масштаб для допусков.</p>
+        <details class="more-opts">
+          <summary>Крышка и что проверять</summary>
+          <div class="form">
+            <label>Диаметр крышки, мм <input id="suCapD" type="number" value="30"></label>
+            <label>Высота крышки, мм <input id="suCapH" type="number" value="18"></label>
+          </div>
+          <div class="row">
+            <span class="hint">Проверять:</span>
+            <label class="check"><input type="checkbox" id="suCap" checked> крышку</label>
+            <label class="check"><input type="checkbox" id="suLabel" checked> этикетку</label>
+            <label class="check"><input type="checkbox" id="suLevel" checked> уровень</label>
+          </div>
+        </details>
         <button id="suMake" class="primary" disabled>Создать рецепт</button>
         <pre id="suNotes" class="hidden"></pre>
         <img id="suCheck" class="hidden" alt="">
@@ -113,10 +123,12 @@
     <div class="form">
       <label>Бутылок <input id="sN" type="number" value="300" min="10" max="2000"></label>
       <label>Доля брака <input id="sRate" type="number" value="0.3" step="0.05" min="0" max="1"></label>
-      <label>Seed <input id="sSeed" type="number" value="7"></label>
       <button id="sRun" class="primary" disabled>Прогнать</button>
       <button id="sGood" disabled>60 годных для калибровки</button>
     </div>
+    <details class="more-opts"><summary>Дополнительно</summary>
+      <div class="form"><label>Seed <input id="sSeed" type="number" value="7"></label></div>
+    </details>
     <div id="sProgress" class="progress hidden"><div></div></div>
     <p class="hint">Порядок как в README: «60 годных» → вкладка «Рецепт» → «Калибровать» → «Прогнать» → «Метрики».</p>
   </section>
@@ -139,20 +151,25 @@
   </section>
 
   <section id="conveyor" class="tab">
-    <p class="lead">Модель ленты: решение встаёт в очередь с позицией энкодера на момент съёмки. Датчик перед сбрасывателем сверяет, та ли бутылка приехала. Незнакомую бутылку система сбрасывает.</p>
+    <p class="lead">Модель ленты: сбросит ли сбрасыватель именно ту бутылку.</p>
+    <details class="about"><summary>Как это работает</summary><p>Решение встаёт в очередь с позицией энкодера на момент съёмки. Датчик перед сбрасывателем сверяет, та ли бутылка приехала. Незнакомую бутылку система сбрасывает.</p></details>
     <div class="form">
       <label class="check"><input type="checkbox" id="cJournal"> решения из журнала</label>
       <label>Бутылок <input id="cN" type="number" value="2000"></label>
       <label>Доля брака <input id="cRate" type="number" value="0.03" step="0.01"></label>
       <label>Камера → сбрасыватель, мм <input id="cDist" type="number" value="600"></label>
-      <label>Окно совпадения, мм <input id="cWin" type="number" value="25"></label>
-      <label>Проскальзывание СКО, мм <input id="cSlip" type="number" value="2" step="0.5"></label>
       <label>Скорость ленты, мм/с <input id="cSpeed" type="number" value="250"></label>
-      <label>Задержка решения, мс <input id="cLat" type="number" value="150"></label>
-      <label>Снимают с ленты, вероятн. <input id="cRem" type="number" value="0" step="0.005"></label>
-      <label>Подставляют чужую, вероятн. <input id="cFor" type="number" value="0" step="0.005"></label>
       <button id="cRun" class="primary" disabled>Симулировать</button>
     </div>
+    <details class="more-opts"><summary>Дополнительно</summary>
+      <div class="form">
+        <label>Окно совпадения, мм <input id="cWin" type="number" value="25"></label>
+        <label>Проскальзывание СКО, мм <input id="cSlip" type="number" value="2" step="0.5"></label>
+        <label>Задержка решения, мс <input id="cLat" type="number" value="150"></label>
+        <label>Снимают с ленты, вероятн. <input id="cRem" type="number" value="0" step="0.005"></label>
+        <label>Подставляют чужую, вероятн. <input id="cFor" type="number" value="0" step="0.005"></label>
+      </div>
+    </details>
     <div class="row presets">
       <span>Сценарии:</span>
       <button data-preset="normal">норма</button>
@@ -164,7 +181,8 @@
   </section>
 
   <section id="sim" class="tab">
-    <p class="lead">Виртуальный конвейер по эталону: из снимка годной бутылки получаются кадры с разбросом и браком. Каждый кадр проходит ту же проверку, что и живая камера, а решение едет по очереди к сбрасывателю.</p>
+    <p class="lead">Виртуальный конвейер по эталону: кадры с разбросом и браком из снимка годной бутылки.</p>
+    <details class="about"><summary>Как это работает</summary><p>Каждый кадр проходит ту же проверку, что и живая камера, а решение едет по очереди к сбрасывателю.</p></details>
     <div class="row">
       <span id="simRecipe" class="hint"></span>
       <button id="simWater" disabled>Взять эталон «вода 1,5 л»</button>
@@ -177,11 +195,15 @@
           <label>Доля брака <input id="simRate" type="number" value="0.3" step="0.05" min="0" max="1"></label>
           <label>Сила брака
             <select id="simSev"><option value="clear">явный (1,5–3 допуска)</option><option value="edge">пограничный (1,1–1,6 допуска)</option></select></label>
-          <label>Разброс положения и света <input id="simJit" type="number" value="1" step="0.25" min="0" max="3"></label>
-          <label>Выдержка камеры, мс <input id="simExp" type="number" value="1" step="0.5" min="0"></label>
-          <label>Seed <input id="simSeed" type="number" value="1"></label>
         </div>
-        <div id="simDefects" class="row"></div>
+        <details class="more-opts"><summary>Виды брака и камера</summary>
+          <div id="simDefects" class="row"></div>
+          <div class="form">
+            <label>Разброс положения и света <input id="simJit" type="number" value="1" step="0.25" min="0" max="3"></label>
+            <label>Выдержка камеры, мс <input id="simExp" type="number" value="1" step="0.5" min="0"></label>
+            <label>Seed <input id="simSeed" type="number" value="1"></label>
+          </div>
+        </details>
         <div class="row">
           <button id="simPrep" class="primary" disabled>Подготовить кадры</button>
           <label class="check"><input type="checkbox" id="simJournal" checked> добавить в журнал</label>
@@ -195,10 +217,14 @@
           <label>Скорость ленты, мм/с <input id="simSpeed" type="number" value="250"></label>
           <label>Шаг между бутылками, мм <input id="simGap" type="text" value="120–200"></label>
           <label>Камера → сбрасыватель, мм <input id="simDist" type="number" value="600"></label>
-          <label>Окно совпадения, мм <input id="simWin" type="number" value="25"></label>
-          <label>Задержка решения, мс <input id="simLat" type="number" value="150"></label>
-          <label>Проскальзывание СКО, мм <input id="simSlip" type="number" value="2" step="0.5"></label>
         </div>
+        <details class="more-opts"><summary>Дополнительно</summary>
+          <div class="form">
+            <label>Окно совпадения, мм <input id="simWin" type="number" value="25"></label>
+            <label>Задержка решения, мс <input id="simLat" type="number" value="150"></label>
+            <label>Проскальзывание СКО, мм <input id="simSlip" type="number" value="2" step="0.5"></label>
+          </div>
+        </details>
         <div class="row">
           <button id="simPlay" disabled>▶ Пуск</button>
           <button id="simRestart" disabled>Заново на тех же кадрах</button>
@@ -220,16 +246,17 @@
         <p id="simNote" class="hint"></p>
       </div>
     </div>
-    <h3>Ошибки</h3>
-    <p class="hint">Пропущенный брак и сброшенные годные — что именно увидела камера.</p>
-    <div id="simErrors" class="cards"></div>
+    <details class="section"><summary>Ошибки — что именно увидела камера</summary>
+      <div id="simErrors" class="cards"></div>
+    </details>
   </section>
 
   <section id="sim3d" class="tab">
-    <p class="lead">Линия в 3D. Виртуальная камера снимает каждую бутылку, кадр проверяет тот же код, что и живую камеру (в фоновом потоке, поэтому время проверки — настоящая задержка решения). Эталон камера снимает сама, как наладчик на линии. Мышью или пальцем сцену можно вращать и приближать.</p>
+    <p class="lead">Линия в 3D: виртуальная камера снимает бутылки, кадры проверяет тот же код, что и живую камеру. Сцену можно вращать и приближать.</p>
+    <details class="about"><summary>Как это работает</summary><p>Проверка идёт в фоновом потоке, поэтому её время — настоящая задержка решения. Эталон камера снимает сама, как наладчик на линии. Время ×2 ускоряет ленту, но не проверку кадров: решения будут опаздывать сильнее, чем на реальной скорости.</p></details>
     <div class="row">
       <button id="s3play" class="primary">▶ Пуск</button>
-      <button id="s3reset">Заново (с новым эталоном, если менялись поворот, подсветка или расстояние)</button>
+      <button id="s3reset" title="С новым эталоном, если менялись поворот, подсветка или расстояние">Заново</button>
       <label>Время <select id="s3speedup"><option value="0.5">×0,5</option><option value="1" selected>×1</option><option value="2">×2</option></select></label>
       <span class="hint">Вид:</span>
       <button data-view3d="overview">общий</button>
@@ -243,6 +270,7 @@
       <div id="s3inset" class="inset"></div>
     </div>
     <div id="s3stats" class="stats"></div>
+    <details class="section"><summary>Настройки линии</summary>
     <div class="simgrid">
       <fieldset>
         <legend>Бутылки</legend>
@@ -269,6 +297,8 @@
         </div>
       </fieldset>
     </div>
+    </details>
+    <details class="section"><summary>Эталон, виды брака и ошибки</summary>
     <div class="cam">
       <div>
         <h3>Эталон 3D-камеры</h3>
@@ -277,13 +307,13 @@
       <div>
         <h3>По видам брака</h3>
         <table id="s3table" class="tbl"></table>
-        <p class="hint">Время ×2 ускоряет ленту, но не проверку кадров: решения будут опаздывать сильнее, чем на реальной скорости.</p>
       </div>
     </div>
     <h3>Ошибки</h3>
     <div id="s3errors" class="cards"></div>
+    </details>
 
-    <h3>Карта надёжности</h3>
+    <details class="section"><summary>Карта надёжности: поворот × число камер</summary>
     <p class="hint">Прогон без анимации по сетке «поворот бутылок × число камер»: для каждой клетки камера заново снимает эталон и калибруется, затем проверяет бутылки (половина с браком из отмеченных видов). Подсветка, сила брака и шаг — из настроек выше. Лента и сбрасыватель здесь не участвуют.</p>
     <div class="form">
       <label>Повороты, ±° <input id="s3mapRot" type="text" value="0, 30, 90, 180"></label>
@@ -292,8 +322,9 @@
       <button id="s3map">Построить карту</button>
     </div>
     <table id="s3mapTable" class="tbl map"></table>
+    </details>
 
-    <h3>Порог: пропуск брака или ложный сброс</h3>
+    <details class="section"><summary>Порог: пропуск брака или ложный сброс</summary>
     <p class="hint">Камера при текущих настройках снимает выборку бутылок (половина с браком), замеры сохраняются, дальше допуски перебираются мгновенно. Потери считаются на 1000 бутылок при реальной доле брака на линии.</p>
     <div class="form">
       <label>Бутылок в выборке <input id="s3tN" type="number" value="150" min="20"></label>
@@ -303,13 +334,14 @@
       <button id="s3tCollect">Собрать замеры</button>
       <button id="s3tApply" disabled>Применить к рецепту 3D</button>
     </div>
-    <canvas id="s3tPlot" class="plot"></canvas>
+    <canvas id="s3tPlot" class="plot hidden"></canvas>
     <table id="s3tTable" class="tbl"></table>
     <p id="s3tNote" class="hint"></p>
+    </details>
   </section>
 
   <section id="calc" class="tab">
-    <p class="lead">Расчёт станции контроля по производительности линии: такт, камера и объектив, выдержка, вычислитель, пневмосбрасыватель и где его ставить. Результат — требования к оборудованию; кнопка внизу переносит скорость, шаг и расстояние в 3D-линию.</p>
+    <p class="lead">Требования к оборудованию по производительности линии: камера, объектив, выдержка, вычислитель, сбрасыватель.</p>
     <div class="simgrid">
       <fieldset>
         <legend>Линия и бутылка</legend>
@@ -318,9 +350,13 @@
           <label>Шаг между бутылками, мм <input id="kPitch" type="number" value="150"></label>
           <label>Диаметр бутылки, мм <input id="kD" type="number" value="88"></label>
           <label>Высота бутылки, мм <input id="kH" type="number" value="352"></label>
-          <label>Точность контроля, мм <input id="kAcc" type="number" value="1" step="0.1"></label>
-          <label>Проскальзывание СКО, мм <input id="kSlip" type="number" value="2" step="0.5"></label>
         </div>
+        <details class="more-opts"><summary>Дополнительно</summary>
+          <div class="form">
+            <label>Точность контроля, мм <input id="kAcc" type="number" value="1" step="0.1"></label>
+            <label>Проскальзывание СКО, мм <input id="kSlip" type="number" value="2" step="0.5"></label>
+          </div>
+        </details>
       </fieldset>
       <fieldset>
         <legend>Оборудование</legend>
@@ -328,18 +364,21 @@
           <label>Сенсор камеры <select id="kSensor"></select></label>
           <label>Рабочее расстояние, мм <input id="kWD" type="number" value="600"></label>
           <label>Камер на бутылку <input id="kCams" type="number" value="3" min="1" max="6"></label>
-          <label>Допустимый смаз, px <input id="kBlur" type="number" value="1" step="0.5"></label>
-          <label>Проверка кадра, мс <input id="kProc" type="number" value="40"></label>
-          <label>Срабатывание клапана, мс <input id="kValve" type="number" value="15"></label>
-          <label>Скорость штока, м/с <input id="kRod" type="number" value="1" step="0.1"></label>
         </div>
-        <p class="hint">Проверка кадра: в браузере (Pyodide) 130–300 мс, на промышленном ПК с OpenCV — обычно 20–50 мс.</p>
+        <details class="more-opts"><summary>Дополнительно</summary>
+          <div class="form">
+            <label>Допустимый смаз, px <input id="kBlur" type="number" value="1" step="0.5"></label>
+            <label>Проверка кадра, мс <input id="kProc" type="number" value="40"></label>
+            <label>Срабатывание клапана, мс <input id="kValve" type="number" value="15"></label>
+            <label>Скорость штока, м/с <input id="kRod" type="number" value="1" step="0.1"></label>
+          </div>
+          <p class="hint">Проверка кадра: в браузере (Pyodide) 130–300 мс, на промышленном ПК с OpenCV — обычно 20–50 мс.</p>
+        </details>
       </fieldset>
     </div>
     <table id="kOut" class="tbl calc"></table>
     <div class="row">
-      <button id="kTo3d" class="primary">Перенести в 3D-линию</button>
-      <span class="hint">скорость ленты, шаг, расстояние до сбрасывателя и число камер</span>
+      <button id="kTo3d" class="primary" title="Скорость ленты, шаг, расстояние до сбрасывателя и число камер">Перенести в 3D-линию</button>
     </div>
   </section>
 

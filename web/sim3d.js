@@ -666,6 +666,7 @@ async function updateTradeoff() {
 }
 
 function plotTradeoff(res) {
+  el.tPlot.classList.remove("hidden");
   const cv = el.tPlot, dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = 260;
   cv.width = W * dpr;
   cv.height = H * dpr;
