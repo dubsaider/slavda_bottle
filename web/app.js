@@ -95,16 +95,24 @@ function recipeJson() {
 }
 
 // ---------- вкладки ----------
-// редкие вкладки спрятаны под «Ещё»; открытая вкладка видна всегда
-$("tabsMore").addEventListener("click", () => {
-  const open = $("tabs").classList.toggle("expanded");
-  $("tabsMore").setAttribute("aria-expanded", open);
-  $("tabsMore").textContent = open ? "Меньше ▴" : "Ещё ▾";
+// всё, кроме линии, спрятано в меню «Инструменты»; выбранный инструмент виден на кнопке
+function closeMenu() {
+  $("tabs").classList.remove("expanded");
+  $("tabsMore").setAttribute("aria-expanded", false);
+}
+$("tabsMore").addEventListener("click", (e) => {
+  e.stopPropagation();
+  $("tabsMore").setAttribute("aria-expanded", $("tabs").classList.toggle("expanded"));
 });
+document.addEventListener("click", (e) => { if (!e.target.closest(".menuList")) closeMenu(); });
 
 document.querySelectorAll("#tabs button[data-tab]").forEach((b) =>
   b.addEventListener("click", () => {
     document.querySelectorAll("#tabs button[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
+    closeMenu();
+    const tool = b.closest(".menuList");
+    $("tabsMore").classList.toggle("on", !!tool);
+    $("tabsMore").textContent = (tool ? b.firstChild.textContent.trim() : "Инструменты") + " ▾";
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === b.dataset.tab));
     if (b.dataset.tab === "journal") renderJournal();
     if (b.dataset.tab === "metrics") renderMetrics();
@@ -942,3 +950,4 @@ document.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("clic
   document.querySelector(`#tabs button[data-tab="${b.dataset.goto}"]`).click()));
 
 boot();
+loadSim3d();  // линия — главный экран

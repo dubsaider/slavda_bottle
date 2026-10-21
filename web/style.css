@@ -9,20 +9,21 @@
   }
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 14px 16px 8px; }
-h1 { font-size: 20px; margin: 0; }
-.sub { color: var(--muted); font-size: 13px; }
+/* приложение на весь экран: прокручивается содержимое вкладки, а не страница */
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+header { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: center; padding: 6px 16px; border-bottom: 1px solid var(--line); flex: none; }
+h1 { font-size: 17px; margin: 0; white-space: nowrap; }
 .status { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); }
 .status.loading { color: var(--muted); }
 .status.ready { color: var(--ok); }
 .status.error { color: var(--bad); }
-nav { display: flex; gap: 4px; overflow-x: auto; padding: 0 16px; border-bottom: 1px solid var(--line); }
-nav button { border: 0; border-radius: 0; background: none; color: var(--muted); padding: 10px 12px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+nav { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; min-width: 0; }
+nav button { border: 0; border-radius: 0; background: none; color: var(--muted); padding: 6px 10px; font: inherit; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
 nav button.on { background: none; color: var(--ink); border: 0; border-bottom: 2px solid var(--accent); border-radius: 0; }
 .pill { font-size: 11px; background: var(--line); border-radius: 999px; padding: 1px 7px; }
-main { padding: 12px 16px 40px; max-width: 1200px; }
-.tab { display: none; }
+main { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; }
+.tab { display: none; max-width: 1200px; padding-bottom: 28px; }
 .tab.on { display: block; }
 .bar, .row, .form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 6px 0 12px; }
 .form label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); }
@@ -103,8 +104,29 @@ input#simGap { width: 130px; }
 .tbl th:first-child, .tbl td:first-child { text-align: left; }
 .tbl tr.bad td { color: var(--bad); }
 
-.s3view { position: relative; margin: 8px 0 12px; }
-#s3canvas { height: 62vh; min-height: 340px; border-radius: 10px; overflow: hidden; background: #2b2f33; touch-action: none; }
+/* линия — главный экран: сцена на всю высоту, справа панель */
+#sim3d.tab.on { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; height: 100%; max-width: none; padding: 0; }
+.s3view { position: relative; min-height: 0; }
+#s3canvas { height: 100%; border-radius: 10px; overflow: hidden; background: #2b2f33; touch-action: none; }
+.s3views { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; }
+.s3views button { background: rgba(0,0,0,.55); color: #fff; border-color: transparent; padding: 3px 8px; font-size: 12px; }
+.s3side { min-height: 0; overflow-y: auto; padding-right: 2px; }
+.s3side > .row:first-child { margin-top: 0; }
+.s3side .stats { display: grid; grid-template-columns: 1fr 1fr; }
+.s3side .stat { font-size: 12px; }
+.s3side details.section { margin-top: 4px; padding-top: 8px; }
+.s3side fieldset { margin-bottom: 8px; }
+.s3side .form input[type=number], .s3side input[type=text] { width: 140px; }
+.s3side .form select { max-width: 300px; }
+.s3side .tbl { font-size: 12px; display: block; overflow-x: auto; }
+.s3side .tbl th, .s3side .tbl td { padding: 3px 6px; }
+.s3side h3 { font-size: 14px; margin: 10px 0 6px; }
+.s3side .cards { grid-template-columns: 1fr; }
+@media (max-width: 860px) {
+  #sim3d.tab.on { grid-template-columns: 1fr; height: auto; }
+  .s3view { height: 58vh; }
+  .s3side { overflow: visible; }
+}
 #s3canvas canvas { display: block; width: 100%; height: 100%; }
 .hud { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 6px; pointer-events: none; }
 .hud:empty { display: none; }
@@ -129,9 +151,14 @@ canvas.plot { width: 100%; max-width: 640px; display: block; background: var(--p
 
 .hstate { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 .hstate label.check { font-size: 13px; color: var(--muted); }
-nav button.more { display: none; }
-nav.expanded button.more, nav button.more.on { display: inline-block; }
-nav button.moreToggle { margin-left: auto; }
+.menu { position: relative; }
+.menuList { display: none; position: absolute; top: 100%; left: 0; z-index: 20; min-width: 220px; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+nav.expanded .menuList { display: flex; }
+nav .menuList button { text-align: left; border: 0; border-radius: 6px; color: var(--ink); padding: 7px 10px; }
+nav .menuList button:hover { background: var(--bg); }
+nav .menuList button.on { border: 0; border-radius: 6px; background: var(--bg); color: var(--accent); }
+#s3canvas:empty::before { content: "Нажмите «Пуск» — линия построится здесь"; display: grid; place-items: center; height: 100%; color: #a8a29e; font-size: 14px; }
 details.about, details.more-opts { margin: 4px 0 12px; }
 details.about > summary, details.more-opts > summary { cursor: pointer; color: var(--muted); font-size: 13px; width: fit-content; }
 details.about > p { max-width: 760px; color: var(--muted); font-size: 14px; margin: 6px 0 0; }
@@ -139,3 +166,10 @@ details.more-opts[open] { border-left: 2px solid var(--line); padding-left: 10px
 details.section { border-top: 1px solid var(--line); padding: 10px 0 4px; margin-top: 12px; }
 details.section > summary { cursor: pointer; font-weight: 600; font-size: 15px; }
 details.section[open] > summary { margin-bottom: 8px; }
+@media (max-width: 600px) {
+  header { padding: 4px 12px; gap: 2px 10px; }
+  h1 { font-size: 15px; }
+  nav { flex-wrap: nowrap; }
+  .menuList { position: fixed; top: auto; left: 12px; right: 12px; }
+  main { padding: 8px 12px; }
+}

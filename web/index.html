@@ -16,33 +16,33 @@
 </head>
 <body>
 <header>
-  <div class="brand">
-    <h1>Отбраковка бутылок</h1>
-    <span class="sub">прототип без оборудования · всё считается в браузере</span>
-  </div>
+  <h1 title="Прототип без оборудования · всё считается в браузере">Отбраковка бутылок</h1>
+  <nav id="tabs">
+    <button data-tab="sim3d" class="on">Линия</button>
+    <div class="menu">
+      <button id="tabsMore" class="moreToggle" aria-expanded="false" aria-haspopup="true">Инструменты ▾</button>
+      <div class="menuList">
+        <button data-tab="calc">Расчёт станции</button>
+        <button data-tab="camera">Камера</button>
+        <button data-tab="setup">Настройка эталона</button>
+        <button data-tab="journal">Журнал <span id="jcount" class="pill">0</span></button>
+        <button data-tab="metrics">Метрики</button>
+        <button data-tab="recipe">Рецепт</button>
+        <button data-tab="sim">2D-симулятор</button>
+        <button data-tab="conveyor">Конвейер</button>
+        <button data-tab="synth">Синтетика</button>
+        <button data-tab="help">Как снимать</button>
+      </div>
+    </div>
+  </nav>
   <div class="hstate">
-    <label class="check" title="Система решает и пишет в журнал, но не сбрасывает — для камеры, конвейера и симуляторов"><input type="checkbox" id="shadow"> режим «тени»</label>
+    <label class="check" title="Система решает и пишет в журнал, но не сбрасывает — для линии, камеры, конвейера и симуляторов"><input type="checkbox" id="shadow"> режим «тени»</label>
     <div id="status" class="status loading">Загрузка Python и OpenCV…</div>
   </div>
 </header>
 
-<nav id="tabs">
-  <button data-tab="camera" class="on">Камера</button>
-  <button data-tab="setup">Настройка</button>
-  <button data-tab="journal">Журнал <span id="jcount" class="pill">0</span></button>
-  <button data-tab="metrics">Метрики</button>
-  <button data-tab="sim3d">3D-линия</button>
-  <button data-tab="calc">Расчёт</button>
-  <button data-tab="recipe" class="more">Рецепт</button>
-  <button data-tab="sim" class="more">2D-симулятор</button>
-  <button data-tab="conveyor" class="more">Конвейер</button>
-  <button data-tab="synth" class="more">Синтетика</button>
-  <button data-tab="help" class="more">Как снимать</button>
-  <button id="tabsMore" class="moreToggle" aria-expanded="false">Ещё ▾</button>
-</nav>
-
 <main>
-  <section id="camera" class="tab on">
+  <section id="camera" class="tab">
     <div id="demoBanner" class="banner hidden">
       Сейчас включён демо-рецепт для синтетической бутылки — настоящую бутылку он забракует.
       <button data-goto="setup" class="primary">Настроить под свою бутылку</button>
@@ -251,93 +251,92 @@
     </details>
   </section>
 
-  <section id="sim3d" class="tab">
-    <p class="lead">Линия в 3D: виртуальная камера снимает бутылки, кадры проверяет тот же код, что и живую камеру. Сцену можно вращать и приближать.</p>
-    <details class="about"><summary>Как это работает</summary><p>Проверка идёт в фоновом потоке, поэтому её время — настоящая задержка решения. Эталон камера снимает сама, как наладчик на линии. Время ×2 ускоряет ленту, но не проверку кадров: решения будут опаздывать сильнее, чем на реальной скорости.</p></details>
-    <div class="row">
-      <button id="s3play" class="primary">▶ Пуск</button>
-      <button id="s3reset" title="С новым эталоном, если менялись поворот, подсветка или расстояние">Заново</button>
-      <label>Время <select id="s3speedup"><option value="0.5">×0,5</option><option value="1" selected>×1</option><option value="2">×2</option></select></label>
-      <span class="hint">Вид:</span>
-      <button data-view3d="overview">общий</button>
-      <button data-view3d="camera">камера</button>
-      <button data-view3d="ejector">сбрасыватель</button>
-    </div>
-    <p id="s3status" class="hint"></p>
+  <section id="sim3d" class="tab on">
     <div class="s3view">
       <div id="s3canvas"></div>
       <div id="s3hud" class="hud"></div>
+      <div class="s3views">
+        <button data-view3d="overview">общий</button>
+        <button data-view3d="camera">камера</button>
+        <button data-view3d="ejector">сбрасыватель</button>
+      </div>
       <div id="s3inset" class="inset"></div>
     </div>
-    <div id="s3stats" class="stats"></div>
-    <details class="section"><summary>Настройки линии</summary>
-    <div class="simgrid">
-      <fieldset>
-        <legend>Бутылки</legend>
-        <div class="form">
-          <label>Доля брака <input id="s3rate" type="number" value="0.25" step="0.05" min="0" max="1"></label>
-          <label>Поворот вокруг оси, ±° <input id="s3rot" type="number" value="15" min="0" max="180"></label>
-          <label>Камер вокруг бутылки
-            <select id="s3cams"><option value="1" selected>1</option><option value="2">2 (0° и 180°)</option><option value="3">3 (через 120°)</option><option value="4">4 (через 90°)</option></select></label>
-          <label>Сила брака
-            <select id="s3sev"><option value="clear">явный (1,5–3 допуска)</option><option value="edge">пограничный (1,1–1,6 допуска)</option></select></label>
-          <label class="check"><input type="checkbox" id="s3back" checked> подсветка сзади</label>
-        </div>
-        <div id="s3defects" class="row"></div>
-      </fieldset>
-      <fieldset>
-        <legend>Лента и сбрасыватель</legend>
-        <div class="form">
-          <label>Скорость ленты, мм/с <input id="s3speed" type="number" value="200"></label>
-          <label>Шаг между бутылками, мм <input id="s3gap" type="text" value="180–260"></label>
-          <label>Камера → сбрасыватель, мм <input id="s3dist" type="number" value="700"></label>
-          <label>Окно совпадения, мм <input id="s3win" type="number" value="25"></label>
-          <label>Проскальзывание СКО, мм <input id="s3slip" type="number" value="2" step="0.5"></label>
-          <label>Мин. задержка решения, мс <input id="s3lat" type="number" value="0"></label>
-        </div>
-      </fieldset>
-    </div>
-    </details>
-    <details class="section"><summary>Эталон, виды брака и ошибки</summary>
-    <div class="cam">
-      <div>
+    <aside class="s3side">
+      <div class="row">
+        <button id="s3play" class="primary">▶ Пуск</button>
+        <button id="s3reset" title="С новым эталоном, если менялись поворот, подсветка или расстояние">Заново</button>
+        <label title="Ускоряет ленту, но не проверку кадров: решения опаздывают сильнее">Время <select id="s3speedup"><option value="0.5">×0,5</option><option value="1" selected>×1</option><option value="2">×2</option></select></label>
+      </div>
+      <p id="s3status" class="hint"></p>
+      <div id="s3stats" class="stats"></div>
+      <details class="section">
+        <summary>Настройки линии</summary>
+        <fieldset>
+          <legend>Бутылки</legend>
+          <div class="form">
+            <label>Доля брака <input id="s3rate" type="number" value="0.25" step="0.05" min="0" max="1"></label>
+            <label>Поворот вокруг оси, ±° <input id="s3rot" type="number" value="15" min="0" max="180"></label>
+            <label>Камер вокруг бутылки
+              <select id="s3cams"><option value="1" selected>1</option><option value="2">2 (0° и 180°)</option><option value="3">3 (через 120°)</option><option value="4">4 (через 90°)</option></select></label>
+            <label>Сила брака
+              <select id="s3sev"><option value="clear">явный (1,5–3 допуска)</option><option value="edge">пограничный (1,1–1,6 допуска)</option></select></label>
+            <label class="check"><input type="checkbox" id="s3back" checked> подсветка сзади</label>
+          </div>
+          <div id="s3defects" class="row"></div>
+        </fieldset>
+        <fieldset>
+          <legend>Лента и сбрасыватель</legend>
+          <div class="form">
+            <label>Скорость ленты, мм/с <input id="s3speed" type="number" value="200"></label>
+            <label>Шаг между бутылками, мм <input id="s3gap" type="text" value="180–260"></label>
+            <label>Камера → сбрасыватель, мм <input id="s3dist" type="number" value="700"></label>
+            <label>Окно совпадения, мм <input id="s3win" type="number" value="25"></label>
+            <label>Проскальзывание СКО, мм <input id="s3slip" type="number" value="2" step="0.5"></label>
+            <label>Мин. задержка решения, мс <input id="s3lat" type="number" value="0"></label>
+          </div>
+        </fieldset>
+      </details>
+      <details class="section">
+        <summary>Эталон, виды брака и ошибки</summary>
         <h3>Эталон 3D-камеры</h3>
         <div id="s3ref" class="last empty">Будет снят при первом пуске.</div>
-      </div>
-      <div>
         <h3>По видам брака</h3>
         <table id="s3table" class="tbl"></table>
-      </div>
-    </div>
-    <h3>Ошибки</h3>
-    <div id="s3errors" class="cards"></div>
-    </details>
-
-    <details class="section"><summary>Карта надёжности: поворот × число камер</summary>
-    <p class="hint">Прогон без анимации по сетке «поворот бутылок × число камер»: для каждой клетки камера заново снимает эталон и калибруется, затем проверяет бутылки (половина с браком из отмеченных видов). Подсветка, сила брака и шаг — из настроек выше. Лента и сбрасыватель здесь не участвуют.</p>
-    <div class="form">
-      <label>Повороты, ±° <input id="s3mapRot" type="text" value="0, 30, 90, 180"></label>
-      <label>Камер <input id="s3mapCams" type="text" value="1, 2, 3, 4"></label>
-      <label>Бутылок в клетке <input id="s3mapN" type="number" value="30" min="6"></label>
-      <button id="s3map">Построить карту</button>
-    </div>
-    <table id="s3mapTable" class="tbl map"></table>
-    </details>
-
-    <details class="section"><summary>Порог: пропуск брака или ложный сброс</summary>
-    <p class="hint">Камера при текущих настройках снимает выборку бутылок (половина с браком), замеры сохраняются, дальше допуски перебираются мгновенно. Потери считаются на 1000 бутылок при реальной доле брака на линии.</p>
-    <div class="form">
-      <label>Бутылок в выборке <input id="s3tN" type="number" value="150" min="20"></label>
-      <label>Брака на линии, % <input id="s3tPrev" type="number" value="1" step="0.1" min="0"></label>
-      <label>Цена ложного сброса, ₽ <input id="s3tCostF" type="number" value="40"></label>
-      <label>Цена пропущенного брака, ₽ <input id="s3tCostM" type="number" value="2000"></label>
-      <button id="s3tCollect">Собрать замеры</button>
-      <button id="s3tApply" disabled>Применить к рецепту 3D</button>
-    </div>
-    <canvas id="s3tPlot" class="plot hidden"></canvas>
-    <table id="s3tTable" class="tbl"></table>
-    <p id="s3tNote" class="hint"></p>
-    </details>
+        <h3>Ошибки</h3>
+        <div id="s3errors" class="cards"></div>
+      </details>
+      <details class="section">
+        <summary>Карта надёжности</summary>
+        <p class="hint">Прогон без анимации по сетке «поворот бутылок × число камер»: для каждой клетки камера заново снимает эталон и калибруется, затем проверяет бутылки (половина с браком из отмеченных видов). Подсветка, сила брака и шаг — из настроек выше. Лента и сбрасыватель здесь не участвуют.</p>
+        <div class="form">
+          <label>Повороты, ±° <input id="s3mapRot" type="text" value="0, 30, 90, 180"></label>
+          <label>Камер <input id="s3mapCams" type="text" value="1, 2, 3, 4"></label>
+          <label>Бутылок в клетке <input id="s3mapN" type="number" value="30" min="6"></label>
+          <button id="s3map">Построить карту</button>
+        </div>
+        <table id="s3mapTable" class="tbl map"></table>
+      </details>
+      <details class="section">
+        <summary>Порог: пропуск или ложный сброс</summary>
+        <p class="hint">Камера при текущих настройках снимает выборку бутылок (половина с браком), замеры сохраняются, дальше допуски перебираются мгновенно. Потери считаются на 1000 бутылок при реальной доле брака на линии.</p>
+        <div class="form">
+          <label>Бутылок в выборке <input id="s3tN" type="number" value="150" min="20"></label>
+          <label>Брака на линии, % <input id="s3tPrev" type="number" value="1" step="0.1" min="0"></label>
+          <label>Цена ложного сброса, ₽ <input id="s3tCostF" type="number" value="40"></label>
+          <label>Цена пропущенного брака, ₽ <input id="s3tCostM" type="number" value="2000"></label>
+          <button id="s3tCollect">Собрать замеры</button>
+          <button id="s3tApply" disabled>Применить к рецепту 3D</button>
+        </div>
+        <canvas id="s3tPlot" class="plot hidden"></canvas>
+        <table id="s3tTable" class="tbl"></table>
+        <p id="s3tNote" class="hint"></p>
+      </details>
+      <details class="section">
+        <summary>Как это работает</summary>
+        <p class="hint">Виртуальная камера снимает каждую бутылку, кадр проверяет тот же код, что и живую камеру, в фоновом потоке — поэтому время проверки здесь настоящая задержка решения. Эталон камера снимает сама, как наладчик на линии. Сцену можно вращать и приближать мышью или пальцем. Время ×2 ускоряет ленту, но не проверку кадров. Требования к оборудованию — в «Инструменты → Расчёт станции».</p>
+      </details>
+    </aside>
   </section>
 
   <section id="calc" class="tab">
@@ -378,7 +377,7 @@
     </div>
     <table id="kOut" class="tbl calc"></table>
     <div class="row">
-      <button id="kTo3d" class="primary" title="Скорость ленты, шаг, расстояние до сбрасывателя и число камер">Перенести в 3D-линию</button>
+      <button id="kTo3d" class="primary" title="Скорость ленты, шаг, расстояние до сбрасывателя и число камер">Перенести на линию</button>
     </div>
   </section>
 
