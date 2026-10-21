@@ -95,9 +95,16 @@ function recipeJson() {
 }
 
 // ---------- вкладки ----------
-document.querySelectorAll("#tabs button").forEach((b) =>
+// редкие вкладки спрятаны под «Ещё»; открытая вкладка видна всегда
+$("tabsMore").addEventListener("click", () => {
+  const open = $("tabs").classList.toggle("expanded");
+  $("tabsMore").setAttribute("aria-expanded", open);
+  $("tabsMore").textContent = open ? "Меньше ▴" : "Ещё ▾";
+});
+
+document.querySelectorAll("#tabs button[data-tab]").forEach((b) =>
   b.addEventListener("click", () => {
-    document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll("#tabs button[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
     document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.id === b.dataset.tab));
     if (b.dataset.tab === "journal") renderJournal();
     if (b.dataset.tab === "metrics") renderMetrics();

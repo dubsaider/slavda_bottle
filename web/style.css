@@ -126,3 +126,16 @@ pre.small { white-space: pre-wrap; }
 canvas.plot { width: 100%; max-width: 640px; display: block; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; }
 .tbl.calc td, .tbl.calc th { text-align: left; vertical-align: top; }
 .tbl.calc td:nth-child(3) { text-align: center; }
+
+.hstate { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.hstate label.check { font-size: 13px; color: var(--muted); }
+nav button.more { display: none; }
+nav.expanded button.more, nav button.more.on { display: inline-block; }
+nav button.moreToggle { margin-left: auto; }
+details.about, details.more-opts { margin: 4px 0 12px; }
+details.about > summary, details.more-opts > summary { cursor: pointer; color: var(--muted); font-size: 13px; width: fit-content; }
+details.about > p { max-width: 760px; color: var(--muted); font-size: 14px; margin: 6px 0 0; }
+details.more-opts[open] { border-left: 2px solid var(--line); padding-left: 10px; }
+details.section { border-top: 1px solid var(--line); padding: 10px 0 4px; margin-top: 12px; }
+details.section > summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+details.section[open] > summary { margin-bottom: 8px; }
